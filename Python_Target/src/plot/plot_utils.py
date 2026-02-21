@@ -148,7 +148,8 @@ def plot_fit_line(ax: Axes,
         'color': color,
         'marker': marker,
         'markersize': marker_size,
-        'linewidth': DEFAULT_LINE_WIDTH
+        'linewidth': DEFAULT_LINE_WIDTH + 0.5,  # 稍微加粗拟合线使其更明显
+        'zorder': 10  # 确保拟合线显示在数据曲线之上
     }
     
     if markevery is not None:
@@ -266,7 +267,7 @@ def add_vertical_direction_indicator(ax: Axes,
     ax.text(position[0], position[1], text,
            transform=ax.transAxes,
            horizontalalignment='center',
-           verticalalignment='middle',
+           verticalalignment='center',
            fontsize=fontsize,
            fontfamily=DEFAULT_FONT_FAMILY,
            fontweight='bold',
