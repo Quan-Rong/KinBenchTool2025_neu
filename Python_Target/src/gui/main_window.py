@@ -53,65 +53,285 @@ class MainWindow(QMainWindow):
         logger.info("主窗口初始化完成")
     
     def setup_style(self):
-        """设置窗口样式"""
-        # 设置全局样式表
+        """设置窗口样式 - 现代化Material Design风格"""
+        # 现代化样式表 - Material Design 3.0风格
         self.setStyleSheet("""
+            /* 主窗口 - 渐变背景 */
             QMainWindow {
-                background-color: #f5f5f5;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #f8f9fa, stop:1 #e9ecef);
             }
+            
+            /* 菜单栏 - 现代化设计 */
+            QMenuBar {
+                background-color: #ffffff;
+                border-bottom: 2px solid #e0e7ff;
+                padding: 4px;
+                spacing: 3px;
+            }
+            QMenuBar::item {
+                background-color: transparent;
+                padding: 8px 16px;
+                border-radius: 8px;
+                color: #1e293b;
+                font-weight: 500;
+            }
+            QMenuBar::item:selected {
+                background-color: #f1f5f9;
+                color: #6366f1;
+            }
+            QMenu {
+                background-color: #ffffff;
+                border: 1px solid #e2e8f0;
+                border-radius: 12px;
+                padding: 8px;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            }
+            QMenu::item {
+                padding: 10px 24px;
+                border-radius: 8px;
+                color: #334155;
+            }
+            QMenu::item:selected {
+                background-color: #6366f1;
+                color: white;
+            }
+            
+            /* 状态栏 - 现代化设计 */
+            QStatusBar {
+                background-color: #ffffff;
+                border-top: 1px solid #e2e8f0;
+                color: #64748b;
+                padding: 4px;
+            }
+            
+            /* GroupBox - 卡片式设计 */
             QGroupBox {
-                font-weight: bold;
-                border: 2px solid #cccccc;
-                border-radius: 5px;
-                margin-top: 10px;
-                padding-top: 10px;
+                font-weight: 600;
+                font-size: 13px;
+                color: #1e293b;
+                border: 1px solid #e2e8f0;
+                border-radius: 12px;
+                margin-top: 16px;
+                padding-top: 20px;
+                padding-bottom: 12px;
+                padding-left: 12px;
+                padding-right: 12px;
+                background-color: #ffffff;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px;
+                subcontrol-position: top left;
+                left: 16px;
+                padding: 0 8px;
+                background-color: #ffffff;
+                color: #6366f1;
+                font-weight: 600;
             }
+            
+            /* 按钮 - 现代化渐变设计 */
             QPushButton {
-                background-color: #4CAF50;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #6366f1, stop:1 #4f46e5);
                 color: white;
                 border: none;
-                padding: 6px 12px;
-                border-radius: 4px;
-                font-weight: bold;
+                padding: 10px 20px;
+                border-radius: 10px;
+                font-weight: 600;
+                font-size: 13px;
+                min-height: 20px;
+                box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
             }
             QPushButton:hover {
-                background-color: #45a049;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #818cf8, stop:1 #6366f1);
+                box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+                transform: translateY(-1px);
             }
             QPushButton:pressed {
-                background-color: #3d8b40;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #4f46e5, stop:1 #4338ca);
+                box-shadow: 0 1px 4px rgba(99, 102, 241, 0.3);
             }
+            QPushButton:disabled {
+                background-color: #cbd5e1;
+                color: #94a3b8;
+                box-shadow: none;
+            }
+            
+            /* 次要按钮样式 */
+            QPushButton[class="secondary"] {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #f1f5f9, stop:1 #e2e8f0);
+                color: #475569;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            }
+            QPushButton[class="secondary"]:hover {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #e2e8f0, stop:1 #cbd5e1);
+            }
+            
+            /* 输入框 - 现代化设计 */
             QLineEdit {
-                padding: 5px;
-                border: 1px solid #cccccc;
-                border-radius: 3px;
+                padding: 10px 14px;
+                border: 2px solid #e2e8f0;
+                border-radius: 10px;
+                background-color: #ffffff;
+                color: #1e293b;
+                font-size: 13px;
+                selection-background-color: #6366f1;
+                selection-color: white;
             }
             QLineEdit:focus {
-                border: 2px solid #4CAF50;
+                border: 2px solid #6366f1;
+                background-color: #fafafa;
+                box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
             }
+            QLineEdit:disabled {
+                background-color: #f1f5f9;
+                color: #94a3b8;
+                border-color: #cbd5e1;
+            }
+            
+            /* SpinBox - 现代化设计 */
+            QSpinBox, QDoubleSpinBox {
+                padding: 10px 14px;
+                border: 2px solid #e2e8f0;
+                border-radius: 10px;
+                background-color: #ffffff;
+                color: #1e293b;
+                font-size: 13px;
+                selection-background-color: #6366f1;
+                selection-color: white;
+            }
+            QSpinBox:focus, QDoubleSpinBox:focus {
+                border: 2px solid #6366f1;
+                background-color: #fafafa;
+                box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+            }
+            QSpinBox::up-button, QDoubleSpinBox::up-button {
+                background-color: #f1f5f9;
+                border-left: 1px solid #e2e8f0;
+                border-top-right-radius: 10px;
+                width: 20px;
+            }
+            QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover {
+                background-color: #e2e8f0;
+            }
+            QSpinBox::down-button, QDoubleSpinBox::down-button {
+                background-color: #f1f5f9;
+                border-left: 1px solid #e2e8f0;
+                border-bottom-right-radius: 10px;
+                width: 20px;
+            }
+            QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {
+                background-color: #e2e8f0;
+            }
+            
+            /* Tab Widget - 现代化设计 */
             QTabWidget::pane {
-                border: 1px solid #cccccc;
-                background-color: white;
+                border: 1px solid #e2e8f0;
+                border-radius: 12px;
+                background-color: #ffffff;
+                top: -1px;
             }
             QTabBar::tab {
-                background-color: #e0e0e0;
-                color: #333333;
-                padding: 8px 16px;
-                margin-right: 2px;
-                border-top-left-radius: 4px;
-                border-top-right-radius: 4px;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #f8fafc, stop:1 #f1f5f9);
+                color: #64748b;
+                padding: 12px 24px;
+                margin-right: 4px;
+                border-top-left-radius: 12px;
+                border-top-right-radius: 12px;
+                border: 1px solid #e2e8f0;
+                border-bottom: none;
+                font-weight: 500;
+                font-size: 13px;
+                min-width: 100px;
             }
             QTabBar::tab:selected {
-                background-color: white;
-                color: #4CAF50;
-                font-weight: bold;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #ffffff, stop:1 #ffffff);
+                color: #6366f1;
+                font-weight: 600;
+                border-color: #e2e8f0;
+                border-bottom: 2px solid #6366f1;
             }
-            QTabBar::tab:hover {
-                background-color: #f0f0f0;
+            QTabBar::tab:hover:!selected {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #f8fafc, stop:1 #e2e8f0);
+                color: #475569;
+            }
+            
+            /* Label - 现代化设计 */
+            QLabel {
+                color: #334155;
+                font-size: 13px;
+            }
+            
+            /* TextEdit - 现代化设计 */
+            QTextEdit {
+                padding: 12px;
+                border: 2px solid #e2e8f0;
+                border-radius: 10px;
+                background-color: #ffffff;
+                color: #1e293b;
+                font-size: 13px;
+                selection-background-color: #6366f1;
+                selection-color: white;
+            }
+            QTextEdit:focus {
+                border: 2px solid #6366f1;
+                box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+            }
+            
+            /* ScrollBar - 现代化设计 */
+            QScrollBar:vertical {
+                background-color: #f1f5f9;
+                width: 12px;
+                border-radius: 6px;
+                margin: 0;
+            }
+            QScrollBar::handle:vertical {
+                background-color: #cbd5e1;
+                border-radius: 6px;
+                min-height: 30px;
+                margin: 2px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background-color: #94a3b8;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+            
+            QScrollBar:horizontal {
+                background-color: #f1f5f9;
+                height: 12px;
+                border-radius: 6px;
+                margin: 0;
+            }
+            QScrollBar::handle:horizontal {
+                background-color: #cbd5e1;
+                border-radius: 6px;
+                min-width: 30px;
+                margin: 2px;
+            }
+            QScrollBar::handle:horizontal:hover {
+                background-color: #94a3b8;
+            }
+            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+                width: 0px;
+            }
+            
+            /* 消息框 - 现代化设计 */
+            QMessageBox {
+                background-color: #ffffff;
+            }
+            QMessageBox QPushButton {
+                min-width: 80px;
+                padding: 8px 16px;
             }
         """)
     
@@ -121,10 +341,10 @@ class MainWindow(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         
-        # 创建主布局
+        # 创建主布局 - 现代化间距
         main_layout = QHBoxLayout()
-        main_layout.setContentsMargins(5, 5, 5, 5)
-        main_layout.setSpacing(5)
+        main_layout.setContentsMargins(12, 12, 12, 12)
+        main_layout.setSpacing(12)
         
         # 左侧：车辆参数面板
         self.vehicle_params_panel = VehicleParamsPanel()
@@ -293,7 +513,7 @@ class MainWindow(QMainWindow):
             """
             <h2>KinBench Tool</h2>
             <p>K&C (Kinematics & Compliance) Analysis Tool</p>
-            <p><b>Version:</b> 1.0.0</p>
+            <p><b>Version:</b> 0.1.1</p>
             <p><b>Description:</b></p>
             <p>This tool is designed for analyzing vehicle suspension systems.</p>
             <p>It supports Bump, Roll, and Static Load tests.</p>
