@@ -1,0 +1,58 @@
+# 应用默认配置
+
+# 文件设置
+file:
+  default_encoding: utf-8
+  max_file_size_mb: 1000  # 最大文件大小（MB）
+
+# 数据处理设置
+data:
+  quasistatic_data_columns: 2751  # quasiStatic数据列数
+  default_fit_range:  # 默认拟合区间（根据工况不同而不同）
+    bump: [-0.05, 0.05]  # 米
+    roll: [-5, 5]  # 度
+    static_load: [-500, 500]  # 牛顿
+
+# 单位设置
+units:
+  angle: deg  # 角度单位: deg 或 rad
+  length: m  # 长度单位: m 或 mm
+  force: N  # 力单位: N 或 kN
+  stiffness: N/mm  # 刚度单位
+
+# 绘图设置
+plot:
+  figure_size: [12, 8]  # 图表尺寸（英寸）
+  dpi: 100  # 分辨率
+  font_family: Times New Roman
+  font_size: 12
+  line_width: 1.5
+  grid:
+    alpha: 0.3
+    style: --  # 网格线样式
+  colors:
+    left: '#1f77b4'  # 左轮颜色（蓝色）
+    right: '#ff7f0e'  # 右轮颜色（橙色）
+    fit_line: '#d62728'  # 拟合线颜色（红色）
+  
+# UI设置
+ui:
+  window_title: "KnC Bewertung Tool"
+  window_size: [1400, 900]
+  default_vehicle_params:
+    half_load: 0.0  # 半载质量（kg）
+    max_load: 0.0  # 满载质量（kg）
+    unsprung_mass: 0.0  # 非簧载质量（kg）
+    wheel_base: 0.0  # 轴距（m）
+    track_front: 0.0  # 前轮距（m）
+    track_rear: 0.0  # 后轮距（m）
+    cog_height: 0.0  # 重心高度（m）
+    cog_x: 0.0  # 重心X坐标（m）
+    roll_angle: 0.0  # 侧倾角（deg）
+    tire: ""  # 轮胎规格
+
+# 日志设置
+logging:
+  level: INFO  # DEBUG, INFO, WARNING, ERROR
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: logs/app.log  # 日志文件路径
