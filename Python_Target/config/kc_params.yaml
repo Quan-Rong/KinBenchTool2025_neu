@@ -1,0 +1,147 @@
+# K&C参数ID映射配置
+# 此文件定义了所有K&C参数及其对应的ID号
+# 格式：参数名: [ID列表] 或 参数名: ID
+
+# 车轮角度参数
+toe_angle:
+  left: 1796
+  right: 1797
+
+camber_angle:
+  left: 1798
+  right: 1799
+
+caster_angle:
+  left: 1760
+  right: 1761
+
+kingpin_incl_angle:
+  left: 1762
+  right: 1763
+
+# 几何参数
+caster_moment_arm:
+  left: 1790
+  right: 1791
+
+scrub_radius:
+  left: 1788
+  right: 1789
+
+left_tire_contact_point:
+  base: 1825
+  track: 1826
+
+right_tire_contact_point:
+  base: 1830
+  track: 1831
+
+wheel_travel_track:
+  left: 1627
+  right: 1628
+
+wheel_travel_base:
+  left: 1625
+  right: 1626
+
+total_track:
+  vehicle: 1824
+
+# 侧倾相关参数
+roll_center_location:
+  lateral: 1776
+  vertical: 1777
+
+roll_steer:
+  left: 1774
+  right: 1775
+
+roll_camber_coefficient:
+  left: 1770
+  right: 1771
+
+susp_roll_rate:
+  vehicle: 1784
+
+total_roll_rate:
+  vehicle: 1785
+
+# 载荷相关参数
+wheel_load_lateral:
+  left: 1635
+  right: 1636
+
+wheel_load_longitudinal:
+  brak_left: 1631
+  brak_right: 1632
+  driv_left: 1633
+  driv_right: 1634
+
+wheel_load_align:
+  left: 1641
+  right: 1642
+
+wheel_load_vertical_force:
+  left: 1637
+  right: 1638
+
+# 其他参数
+anti_dive:
+  left: 1734
+  right: 1735
+
+anti_lift:
+  left: 1742
+  right: 1743
+
+wheel_rate:
+  left: 1780
+  right: 1781
+
+ride_rate:
+  left: 1782
+  right: 1783
+
+left_tire_forces:
+  x: 1867
+  y: 1868
+  z: 1869
+
+right_tire_forces:
+  x: 1879
+  y: 1880
+  z: 1881
+
+wheel_travel:
+  lateral: 1621
+  vertical: 1622
+
+roll_angle:
+  WC: 1629
+  CP: 1630
+
+side_view_swing_arm_angle:
+  left: 1792
+  right: 1793
+
+side_view_swing_arm_length:
+  left: 1794
+  right: 1795
+
+steering_displacements:
+  vehicle: null  # 需要从文件中提取
+
+steering_wheel_input:
+  vehicle: null  # 需要从文件中提取
+
+anti_squat_acceleration:
+  left: null  # 需要从文件中提取
+  right: null  # 需要从文件中提取
+
+percent_ackerman:
+  left: 1808
+  right: 1809
+
+outside_turn_diameter:
+  left: 1814
+  right: 1815

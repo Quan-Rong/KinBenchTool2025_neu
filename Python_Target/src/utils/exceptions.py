@@ -9,8 +9,18 @@ class KnCToolError(Exception):
     pass
 
 
-class FileParseError(KnCToolError):
+class FileError(KnCToolError):
+    """文件操作错误。"""
+    pass
+
+
+class ParseError(KnCToolError):
     """文件解析错误。"""
+    pass
+
+
+class FileParseError(KnCToolError):
+    """文件解析错误（已弃用，使用ParseError）。"""
     pass
 
 
