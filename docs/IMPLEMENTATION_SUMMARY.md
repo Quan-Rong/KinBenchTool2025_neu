@@ -11,7 +11,7 @@
 
 ### 2. 版本号管理 ✅
 
-- ✅ 创建 `Python_Target/VERSION` 文件（当前版本：0.1.0）
+- ✅ 创建 `Python_Target/VERSION` 文件（当前版本：0.1.1）
 - ✅ 在 `Python_Target/src/__init__.py` 中定义版本号
 - ✅ 创建版本更新脚本 (`scripts/update_version.py`)
 - ✅ 建立语义化版本（SemVer）管理机制

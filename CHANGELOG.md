@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2025-01-27
+
+### Added
+- 漂亮的滑块控件替代SpinBox用于Fit Range设置
+  - 支持整数和浮点数两种模式
+  - 实时显示当前数值
+  - 现代化的UI样式（蓝色渐变滑块、圆形手柄、悬停效果）
+- 自动更新功能：当Fit Range改变时自动重新计算和绘制图表
+
+### Changed
+- 所有测试Tab中的Fit Range控件从SpinBox改为滑块
+  - BumpTestTab: 整数滑块（5-50 mm）
+  - RollTestTab: 浮点数滑块（0.1-5.0 deg）
+  - StaticLoadLateralTab: 浮点数滑块（0.1-10.0 kN）
+  - StaticLoadBrakingTab: 浮点数滑块（0.1-10.0 kN）
+  - StaticLoadAccelerationTab: 浮点数滑块（0.1-10.0 kN）
+- 增强拟合线可见性（增加线宽和zorder）
+
+### Fixed
+- 修复Fit Range改变时图表和结果不自动更新的问题
+- 统一版本号显示（所有位置统一为0.1.1）
+
 ## [0.1.0] - 2025-01-27
 
 ### Added

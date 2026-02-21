@@ -35,14 +35,14 @@ class VehicleParamsPanel(QWidget):
     def setup_ui(self):
         """设置UI界面"""
         layout = QVBoxLayout()
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(10)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(12)
         
         # 创建参数组
         params_group = QGroupBox("Vehicle Parameters")
-        params_group.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+        params_group.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
         params_layout = QGridLayout()
-        params_layout.setSpacing(8)
+        params_layout.setSpacing(12)
         params_layout.setColumnStretch(1, 1)
         
         # 定义参数列表
@@ -62,12 +62,14 @@ class VehicleParamsPanel(QWidget):
         
         row = 0
         for key, label, unit, min_val, max_val, default_val in params_def:
-            # 标签
+            # 标签 - 现代化样式
             param_label = QLabel(f"{label}:")
-            param_label.setMinimumWidth(120)
+            param_label.setMinimumWidth(130)
+            param_label.setFont(QFont("Segoe UI", 10))
+            param_label.setStyleSheet("color: #475569; font-weight: 500;")
             params_layout.addWidget(param_label, row, 0)
             
-            # 输入框
+            # 输入框 - 现代化样式
             spinbox = QDoubleSpinBox()
             spinbox.setMinimum(min_val)
             spinbox.setMaximum(max_val)
@@ -75,6 +77,7 @@ class VehicleParamsPanel(QWidget):
             spinbox.setDecimals(2)
             spinbox.setSuffix(f" {unit}")
             spinbox.valueChanged.connect(self._on_param_changed)
+            spinbox.setFont(QFont("Segoe UI", 10))
             params_layout.addWidget(spinbox, row, 1)
             
             self.param_widgets[key] = spinbox

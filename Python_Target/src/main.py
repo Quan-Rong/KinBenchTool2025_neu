@@ -6,14 +6,18 @@ KnC Bewertung Tool - K&C分析工具主程序
 import sys
 from pathlib import Path
 
-# 添加src目录到路径
-sys.path.insert(0, str(Path(__file__).parent))
+# 添加src目录和其父目录到路径，使相对导入和绝对导入都能工作
+src_dir = Path(__file__).parent
+parent_dir = src_dir.parent
+# 先添加src目录，这样相对导入可以工作
+sys.path.insert(0, str(src_dir))
+# 再添加父目录，这样绝对导入也可以工作
+sys.path.insert(0, str(parent_dir))
 
 from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import Qt
 
-from utils.logger import setup_logger, get_logger
-from gui.main_window import MainWindow
+from src.utils.logger import setup_logger, get_logger
+from src.gui.main_window import MainWindow
 
 # 设置日志
 setup_logger()
@@ -29,9 +33,7 @@ def main():
     app.setApplicationName("KinBench Tool")
     app.setOrganizationName("CAE")
     
-    # 设置应用程序属性
-    QApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling, True)
-    QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps, True)
+    # PyQt6默认启用高DPI缩放，无需手动设置
     
     # 创建主窗口
     try:

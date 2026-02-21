@@ -292,7 +292,7 @@ def plot_wheel_rate(ax_left: Axes,
     # 添加文本：Wheel Rate change
     slope_text = f"Wheel Rate change = {coeffs_left[0]:.4f} N/mm/mm"
     add_custom_text(ax_left, slope_text, (0.5, 0.6 + 0.1 * compare_count),
-                   color=fit_color, compare_count=compare_count)
+                   color=fit_color)
     add_direction_indicator(ax_left, 'bump_rebound')
     
     # 绘制右轮

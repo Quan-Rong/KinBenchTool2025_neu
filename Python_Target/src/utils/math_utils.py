@@ -36,6 +36,23 @@ def linear_fit(x: np.ndarray, y: np.ndarray, degree: int = 1) -> Tuple[np.ndarra
     if len(x) < degree + 1:
         raise ValueError(f"数据点数量({len(x)})不足以进行{degree}次拟合")
     
+    # 检查数据中是否有无效值
+    if np.any(np.isnan(x)) or np.any(np.isnan(y)):
+        logger.warning("数据中包含NaN值，尝试清理")
+        valid_mask = ~(np.isnan(x) | np.isnan(y))
+        x = x[valid_mask]
+        y = y[valid_mask]
+        if len(x) < degree + 1:
+            raise ValueError(f"清理后数据点数量({len(x)})不足以进行{degree}次拟合")
+    
+    if np.any(np.isinf(x)) or np.any(np.isinf(y)):
+        logger.warning("数据中包含Inf值，尝试清理")
+        valid_mask = ~(np.isinf(x) | np.isinf(y))
+        x = x[valid_mask]
+        y = y[valid_mask]
+        if len(x) < degree + 1:
+            raise ValueError(f"清理后数据点数量({len(x)})不足以进行{degree}次拟合")
+    
     try:
         # 使用numpy.polyfit进行拟合
         coefficients = np.polyfit(x, y, degree)
@@ -45,6 +62,30 @@ def linear_fit(x: np.ndarray, y: np.ndarray, degree: int = 1) -> Tuple[np.ndarra
         
         logger.debug(f"线性拟合完成: 系数={coefficients}, 数据点数={len(x)}")
         return coefficients, fitted_values
+    except np.linalg.LinAlgError as e:
+        # SVD不收敛或其他线性代数错误
+        logger.warning(f"线性拟合SVD不收敛: {e}，数据点数={len(x)}，尝试使用伪逆方法")
+        try:
+            # 尝试使用伪逆方法作为备选
+            if degree == 1:
+                # 对于线性拟合，使用最小二乘法的显式解
+                A = np.vstack([x, np.ones(len(x))]).T
+                coefficients = np.linalg.lstsq(A, y, rcond=None)[0]
+                # polyfit返回的系数顺序是 [a, b] 对于 y = ax + b
+                # 但lstsq返回的是 [a, b]，需要反转以匹配polyfit的格式
+                coefficients = coefficients[::-1]
+            else:
+                # 对于高次拟合，使用Vandermonde矩阵
+                A = np.vander(x, degree + 1)
+                coefficients = np.linalg.lstsq(A, y, rcond=None)[0]
+                coefficients = coefficients[::-1]
+            
+            fitted_values = np.polyval(coefficients, x)
+            logger.debug(f"使用备选方法完成拟合: 系数={coefficients}")
+            return coefficients, fitted_values
+        except Exception as e2:
+            logger.error(f"备选拟合方法也失败: {e2}")
+            raise ValueError(f"线性拟合失败: 原始错误={e}, 备选方法错误={e2}")
     except Exception as e:
         logger.error(f"线性拟合失败: {e}")
         raise
