@@ -57,3 +57,17 @@ def setup_logger(
 
 # 默认logger
 default_logger = setup_logger()
+
+
+def get_logger(name: Optional[str] = None) -> logging.Logger:
+    """获取logger实例
+    
+    Args:
+        name: logger名称，如果为None则使用默认名称
+        
+    Returns:
+        logger实例
+    """
+    if name is None:
+        return default_logger
+    return logging.getLogger(name)
