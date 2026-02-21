@@ -1,0 +1,38 @@
+[MASTER]
+# 使用多个进程加速检查
+jobs=0
+
+# Python代码文件路径
+init-hook='import sys; sys.path.append("Python_Target")'
+
+[MESSAGES CONTROL]
+# 禁用的检查项
+disable=
+    C0103,  # invalid-name (允许非标准命名，如GUI组件)
+    R0903,  # too-few-public-methods
+    R0913,  # too-many-arguments
+    R0912,  # too-many-branches
+    R0914,  # too-many-locals
+    R0915,  # too-many-statements
+    C0111,  # missing-docstring (允许部分函数无文档字符串)
+
+[FORMAT]
+# 最大行长度
+max-line-length=88
+indent-string='    '
+
+[BASIC]
+# 好的变量名模式
+good-names=i,j,k,ex,Run,_,id,file,ui,app
+
+[DESIGN]
+# 最大参数数量
+max-args=10
+max-locals=25
+max-returns=6
+max-branches=15
+max-statements=60
+
+[IMPORTS]
+# 导入顺序
+import-order=google
