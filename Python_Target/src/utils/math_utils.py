@@ -11,18 +11,22 @@ from .logger import get_logger
 logger = get_logger(__name__)
 
 
-def linear_fit(x: np.ndarray, y: np.ndarray, degree: int = 1) -> Tuple[np.ndarray, np.ndarray]:
+def linear_fit(x: np.ndarray, y: np.ndarray, degree: int = 1, 
+              return_r_squared: bool = False) -> Tuple[np.ndarray, np.ndarray, Optional[float]]:
     """线性拟合（使用numpy.polyfit）
     
     Args:
         x: 自变量数组
         y: 因变量数组
         degree: 多项式次数，默认为1（线性拟合）
+        return_r_squared: 是否返回R²值，默认False
         
     Returns:
-        (coefficients, fitted_values): 拟合系数数组和拟合值数组
+        如果return_r_squared=False: (coefficients, fitted_values)
+        如果return_r_squared=True: (coefficients, fitted_values, r_squared)
         - coefficients: [a, b] 对于线性拟合，表示 y = ax + b
         - fitted_values: 拟合后的y值
+        - r_squared: R²值（决定系数），表示拟合质量，范围[0, 1]，越接近1越好
         
     Raises:
         ValueError: 输入数组长度不匹配或为空
@@ -60,8 +64,23 @@ def linear_fit(x: np.ndarray, y: np.ndarray, degree: int = 1) -> Tuple[np.ndarra
         # 计算拟合值
         fitted_values = np.polyval(coefficients, x)
         
-        logger.debug(f"线性拟合完成: 系数={coefficients}, 数据点数={len(x)}")
-        return coefficients, fitted_values
+        # 计算R²值（如果需要）
+        r_squared = None
+        if return_r_squared:
+            ss_res = np.sum((y - fitted_values) ** 2)
+            ss_tot = np.sum((y - np.mean(y)) ** 2)
+            if ss_tot == 0:
+                r_squared = 1.0  # 如果总平方和为0，说明所有值都相同，R²=1
+            else:
+                r_squared = float(1 - (ss_res / ss_tot))
+            logger.debug(f"线性拟合完成: 系数={coefficients}, R²={r_squared:.4f}, 数据点数={len(x)}")
+        else:
+            logger.debug(f"线性拟合完成: 系数={coefficients}, 数据点数={len(x)}")
+        
+        if return_r_squared:
+            return coefficients, fitted_values, r_squared
+        else:
+            return coefficients, fitted_values
     except np.linalg.LinAlgError as e:
         # SVD不收敛或其他线性代数错误
         logger.warning(f"线性拟合SVD不收敛: {e}，数据点数={len(x)}，尝试使用伪逆方法")
@@ -81,8 +100,24 @@ def linear_fit(x: np.ndarray, y: np.ndarray, degree: int = 1) -> Tuple[np.ndarra
                 coefficients = coefficients[::-1]
             
             fitted_values = np.polyval(coefficients, x)
-            logger.debug(f"使用备选方法完成拟合: 系数={coefficients}")
-            return coefficients, fitted_values
+            
+            # 计算R²值（如果需要）
+            r_squared = None
+            if return_r_squared:
+                ss_res = np.sum((y - fitted_values) ** 2)
+                ss_tot = np.sum((y - np.mean(y)) ** 2)
+                if ss_tot == 0:
+                    r_squared = 1.0
+                else:
+                    r_squared = float(1 - (ss_res / ss_tot))
+                logger.debug(f"使用备选方法完成拟合: 系数={coefficients}, R²={r_squared:.4f}")
+            else:
+                logger.debug(f"使用备选方法完成拟合: 系数={coefficients}")
+            
+            if return_r_squared:
+                return coefficients, fitted_values, r_squared
+            else:
+                return coefficients, fitted_values
         except Exception as e2:
             logger.error(f"备选拟合方法也失败: {e2}")
             raise ValueError(f"线性拟合失败: 原始错误={e}, 备选方法错误={e2}")

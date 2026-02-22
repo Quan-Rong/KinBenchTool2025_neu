@@ -207,8 +207,12 @@ class ResParser:
                     else:
                         # 如果不足2751，只在第一次出现时记录警告，避免重复输出
                         if not warning_issued:
-                            logger.warning(f"数据行长度不足2751，实际长度: {len(test_data)}。"
-                                         f"后续相同情况将不再提示。")
+                            logger.warning(
+                                f"数据行长度不足2751，实际长度: {len(test_data)}。"
+                                f"程序将用0填充到2751列。"
+                                f"这可能是数据文件格式问题，建议检查数据文件完整性。"
+                                f"后续相同情况将不再提示。"
+                            )
                             warning_issued = True
                         # 仍然添加，但用0填充到2751
                         padded = test_data + [0.0] * (2751 - len(test_data))

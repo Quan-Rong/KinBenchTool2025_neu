@@ -662,6 +662,23 @@ class KCCalculator:
         # Side Swing Arm Angle在零位置的值（deg）
         swa_at_zero_left = coeffs_left[1]  # 截距
         swa_at_zero_right = coeffs_right[1]
+        
+        # 异常值检测：角度值应该在合理范围内（-180到180度）
+        # 如果值异常大，可能是数据提取或单位转换错误
+        angle_warning_threshold = 180.0  # 度
+        if abs(swa_at_zero_left) > angle_warning_threshold:
+            logger.warning(
+                f"Bump Side Swing Arm Angle左轮值异常: {swa_at_zero_left:.3f} deg "
+                f"(超出正常范围 ±{angle_warning_threshold} deg)。"
+                f"可能是数据提取错误或单位转换问题。"
+            )
+        if abs(swa_at_zero_right) > angle_warning_threshold:
+            logger.warning(
+                f"Bump Side Swing Arm Angle右轮值异常: {swa_at_zero_right:.3f} deg "
+                f"(超出正常范围 ±{angle_warning_threshold} deg)。"
+                f"可能是数据提取错误或单位转换问题。"
+            )
+        
         swa_at_zero_avg = (swa_at_zero_left + swa_at_zero_right) / 2
         
         logger.debug(f"Bump Side Swing Arm Angle@WC: 左={swa_at_zero_left:.3f}, 右={swa_at_zero_right:.3f}, 平均={swa_at_zero_avg:.3f} deg")

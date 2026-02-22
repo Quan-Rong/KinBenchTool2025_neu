@@ -174,7 +174,6 @@ class MainWindow(QMainWindow):
                 border-bottom: 2px solid rgba(102, 126, 234, 0.3);
                 padding: 4px;
                 spacing: 3px;
-                backdrop-filter: blur(10px);
             }
             QMenuBar::item {
                 background-color: transparent;
@@ -193,7 +192,6 @@ class MainWindow(QMainWindow):
                 border: 1px solid rgba(255, 255, 255, 0.3);
                 border-radius: 12px;
                 padding: 8px;
-                backdrop-filter: blur(15px);
             }
             QMenu::item {
                 padding: 6px 16px;
@@ -212,7 +210,6 @@ class MainWindow(QMainWindow):
                 border-top: 1px solid rgba(102, 126, 234, 0.3);
                 color: #64748b;
                 padding: 4px;
-                backdrop-filter: blur(10px);
             }
             
             /* GroupBox - 半透明毛玻璃效果 */
@@ -228,7 +225,6 @@ class MainWindow(QMainWindow):
                 padding-left: 10px;
                 padding-right: 10px;
                 background-color: rgba(255, 255, 255, 0.75);
-                backdrop-filter: blur(15px);
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
@@ -291,7 +287,6 @@ class MainWindow(QMainWindow):
                 max-height: 28px;
                 selection-background-color: #667eea;
                 selection-color: white;
-                backdrop-filter: blur(10px);
             }
             QLineEdit:focus {
                 border: 2px solid #667eea;
@@ -315,7 +310,6 @@ class MainWindow(QMainWindow):
                 max-height: 28px;
                 selection-background-color: #667eea;
                 selection-color: white;
-                backdrop-filter: blur(10px);
             }
             QSpinBox:focus, QDoubleSpinBox:focus {
                 border: 1px solid #667eea;
@@ -345,7 +339,6 @@ class MainWindow(QMainWindow):
                 border: 1px solid rgba(255, 255, 255, 0.3);
                 border-radius: 12px;
                 background-color: rgba(255, 255, 255, 0.75);
-                backdrop-filter: blur(15px);
                 top: -1px;
             }
             QTabBar::tab {
@@ -389,7 +382,6 @@ class MainWindow(QMainWindow):
                 font-size: 11px;
                 min-height: 24px;
                 max-height: 28px;
-                backdrop-filter: blur(10px);
             }
             QComboBox:hover {
                 border-color: rgba(255, 255, 255, 0.6);
@@ -416,7 +408,6 @@ class MainWindow(QMainWindow):
                 selection-background-color: #667eea;
                 selection-color: white;
                 padding: 2px;
-                backdrop-filter: blur(15px);
             }
             QComboBox QAbstractItemView::item {
                 padding: 3px 6px;
@@ -442,7 +433,6 @@ class MainWindow(QMainWindow):
                 font-size: 13px;
                 selection-background-color: #667eea;
                 selection-color: white;
-                backdrop-filter: blur(10px);
             }
             QTextEdit:focus {
                 border: 2px solid #667eea;
@@ -903,9 +893,9 @@ class MainWindow(QMainWindow):
                 if version_file.exists():
                     version_text = f"v{version_file.read_text().strip()}"
                 else:
-                    version_text = "v0.2.0"
+                    version_text = "v0.3.1"
             except Exception:
-                version_text = "v0.2.0"
+                version_text = "v0.3.1"
         
         version_label = QLabel(version_text)
         version_label.setStyleSheet("color: #64748b; font-size: 10px;")
@@ -1217,9 +1207,9 @@ class MainWindow(QMainWindow):
                 if version_file.exists():
                     version_text = f"v{version_file.read_text().strip()}"
                 else:
-                    version_text = "v0.2.0"
+                    version_text = "v0.3.1"
             except Exception:
-                version_text = "v0.2.0"
+                version_text = "v0.3.1"
         
         version_label = QLabel(version_text)
         version_label.setStyleSheet("color: #64748b; font-size: 10px;")
@@ -1268,7 +1258,7 @@ class MainWindow(QMainWindow):
             """
             <h2>KinBench Tool</h2>
             <p>K&C (Kinematics & Compliance) Analysis Tool</p>
-            <p><b>Version:</b> 0.2.0</p>
+            <p><b>Version:</b> 0.3.1</p>
             <p><b>Description:</b></p>
             <p>This tool is designed for analyzing vehicle suspension systems.</p>
             <p>It supports Bump, Roll, and Static Load tests.</p>
