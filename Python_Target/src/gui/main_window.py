@@ -893,9 +893,9 @@ class MainWindow(QMainWindow):
                 if version_file.exists():
                     version_text = f"v{version_file.read_text().strip()}"
                 else:
-                    version_text = "v0.3.1"
+                    version_text = "v0.3.2"
             except Exception:
-                version_text = "v0.3.1"
+                version_text = "v0.3.2"
         
         version_label = QLabel(version_text)
         version_label.setStyleSheet("color: #64748b; font-size: 10px;")
@@ -1207,9 +1207,9 @@ class MainWindow(QMainWindow):
                 if version_file.exists():
                     version_text = f"v{version_file.read_text().strip()}"
                 else:
-                    version_text = "v0.3.1"
+                    version_text = "v0.3.2"
             except Exception:
-                version_text = "v0.3.1"
+                version_text = "v0.3.2"
         
         version_label = QLabel(version_text)
         version_label.setStyleSheet("color: #64748b; font-size: 10px;")
@@ -1258,7 +1258,7 @@ class MainWindow(QMainWindow):
             """
             <h2>KinBench Tool</h2>
             <p>K&C (Kinematics & Compliance) Analysis Tool</p>
-            <p><b>Version:</b> 0.3.1</p>
+            <p><b>Version:</b> 0.3.2</p>
             <p><b>Description:</b></p>
             <p>This tool is designed for analyzing vehicle suspension systems.</p>
             <p>It supports Bump, Roll, and Static Load tests.</p>

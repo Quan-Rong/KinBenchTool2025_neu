@@ -71,10 +71,12 @@ class TestBumpSteer:
         n_points = 100
         wheel_travel = np.linspace(-50, 50, n_points) / 1000  # m
         toe_angle = np.linspace(-2, 2, n_points) * np.pi / 180  # rad
+        # toe_angle 应该是二维数组 (n_points, 2)，包含左右两列
+        toe_angle_2d = np.column_stack([toe_angle, toe_angle])
         
+        calculator.extractor.extract_wheel_travel_left_right = Mock(return_value=(wheel_travel, wheel_travel))
         calculator.extractor.extract_by_name = Mock(side_effect=lambda name, **kwargs: {
-            'wheel_travel': wheel_travel,
-            'toe_angle': toe_angle
+            'toe_angle': toe_angle_2d
         }.get(name, np.zeros(n_points)))
         
         result = calculator.calculate_bump_steer(fit_range=15)
@@ -102,10 +104,12 @@ class TestBumpCamber:
         n_points = 100
         wheel_travel = np.linspace(-50, 50, n_points) / 1000  # m
         camber_angle = np.linspace(-1, 1, n_points) * np.pi / 180  # rad
+        # camber_angle 应该是二维数组 (n_points, 2)，包含左右两列
+        camber_angle_2d = np.column_stack([camber_angle, camber_angle])
         
+        calculator.extractor.extract_wheel_travel_left_right = Mock(return_value=(wheel_travel, wheel_travel))
         calculator.extractor.extract_by_name = Mock(side_effect=lambda name, **kwargs: {
-            'wheel_travel': wheel_travel,
-            'camber_angle': camber_angle
+            'camber_angle': camber_angle_2d
         }.get(name, np.zeros(n_points)))
         
         result = calculator.calculate_bump_camber(fit_range=15)
@@ -126,8 +130,8 @@ class TestWheelRate:
         wheel_travel = np.linspace(-50, 50, n_points) / 1000  # m
         wheel_rate = np.linspace(100, 200, n_points)  # N/mm
         
+        calculator.extractor.extract_wheel_travel_left_right = Mock(return_value=(wheel_travel, wheel_travel))
         calculator.extractor.extract_by_name = Mock(side_effect=lambda name, **kwargs: {
-            'wheel_travel': wheel_travel,
             'wheel_rate': wheel_rate
         }.get(name, np.zeros(n_points)))
         
