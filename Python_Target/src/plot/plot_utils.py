@@ -18,7 +18,7 @@ logger = get_logger(__name__)
 # 默认样式配置
 DEFAULT_FONT_FAMILY = 'Times New Roman'
 DEFAULT_FONT_SIZE = 10
-DEFAULT_LINE_WIDTH = 1.5
+DEFAULT_LINE_WIDTH = 2.5  # 加粗一号（从1.5改为2.5）
 DEFAULT_MARKER_SIZE = 12
 
 
@@ -92,7 +92,8 @@ def plot_data_curve(ax: Axes,
                    y: np.ndarray,
                    label: str = 'Result',
                    color: Optional[str] = None,
-                   linewidth: float = DEFAULT_LINE_WIDTH) -> None:
+                   linewidth: float = DEFAULT_LINE_WIDTH,
+                   linestyle: str = '-') -> None:
     """绘制数据曲线
     
     Args:
@@ -100,10 +101,14 @@ def plot_data_curve(ax: Axes,
         x: X轴数据
         y: Y轴数据
         label: 曲线标签
-        color: 曲线颜色
+        color: 曲线颜色（默认黑色）
         linewidth: 线宽
+        linestyle: 线形（默认实线）
     """
-    ax.plot(x, y, label=label, color=color, linewidth=linewidth)
+    # 默认颜色为黑色
+    if color is None:
+        color = '#000000'
+    ax.plot(x, y, label=label, color=color, linewidth=linewidth, linestyle=linestyle)
     logger.debug(f"绘制数据曲线: label={label}, 数据点数={len(x)}")
 
 
@@ -115,7 +120,8 @@ def plot_fit_line(ax: Axes,
                   color: Optional[str] = None,
                   marker: str = 'o',
                   marker_size: int = DEFAULT_MARKER_SIZE,
-                  markevery: Optional[Tuple[int, int]] = None) -> None:
+                  markevery: Optional[Tuple[int, int]] = None,
+                  linestyle: str = '-') -> None:
     """绘制拟合直线
     
     Args:
@@ -124,10 +130,11 @@ def plot_fit_line(ax: Axes,
         y_fit: 拟合后的Y值
         fit_range: 拟合区间 (min, max)
         label: 曲线标签
-        color: 曲线颜色
-        marker: 标记样式
+        color: 曲线颜色（默认红色）
+        marker: 标记样式（默认空心小圆点）
         marker_size: 标记大小
         markevery: 标记间隔 (start, end)，用于标记拟合区间的起点和终点
+        linestyle: 线形（默认实线）
     """
     # 筛选拟合区间内的数据
     mask = (x >= fit_range[0]) & (x <= fit_range[1])
@@ -142,13 +149,21 @@ def plot_fit_line(ax: Axes,
     if label is None:
         label = f'curve fitting [{fit_range[0]:.0f}mm, {fit_range[1]:.0f}mm]'
     
+    # 默认颜色为红色
+    if color is None:
+        color = '#ff0000'
+    
     # 绘制拟合线
     plot_kwargs = {
         'label': label,
         'color': color,
         'marker': marker,
         'markersize': marker_size,
+        'markerfacecolor': 'none',  # 空心标记
+        'markeredgecolor': color,
+        'markeredgewidth': 1.5,
         'linewidth': DEFAULT_LINE_WIDTH + 0.5,  # 稍微加粗拟合线使其更明显
+        'linestyle': linestyle,
         'zorder': 10  # 确保拟合线显示在数据曲线之上
     }
     
@@ -165,6 +180,49 @@ def plot_fit_line(ax: Axes,
     ax.plot(x_fit, y_fit_filtered, **plot_kwargs)
     
     logger.debug(f"绘制拟合直线: label={label}, 拟合区间={fit_range}")
+
+
+def plot_sample_points(ax: Axes,
+                       x: np.ndarray,
+                       y: np.ndarray,
+                       fit_start: int,
+                       fit_end: int,
+                       color: Optional[str] = None,
+                       label: str = 'Sample points',
+                       marker_size: int = DEFAULT_MARKER_SIZE) -> None:
+    """在曲线上绘制全部curve区域的样本点（空心方块）
+    
+    Args:
+        ax: matplotlib坐标轴对象
+        x: X轴数据
+        y: Y轴数据
+        fit_start: 拟合区间起始索引（含，保留参数以保持兼容性，但不使用）
+        fit_end: 拟合区间结束索引（不含，保留参数以保持兼容性，但不使用）
+        color: 样本点颜色（默认与曲线一致）
+        label: 图例标签
+        marker_size: 标记大小
+    """
+    # 显示全部curve区域的采样点，而不是仅限于fit range
+    if len(x) == 0 or len(y) == 0:
+        return
+    if len(x) != len(y):
+        logger.warning(f"X和Y数据长度不匹配: x={len(x)}, y={len(y)}")
+        return
+    
+    x_sample = x
+    y_sample = y
+    
+    if color is None:
+        color = '#000000'
+    ax.scatter(x_sample, y_sample,
+               marker='s',
+               s=marker_size * 12,  # 面积，使空心方块大小与拟合线标记相近
+               facecolors='none',
+               edgecolors=color,
+               linewidths=1.5,
+               label=label,
+               zorder=11)
+    logger.debug(f"绘制样本点: {len(x_sample)}个点, 全部curve区域")
 
 
 def add_fit_formula_text(ax: Axes,
@@ -259,7 +317,8 @@ def add_vertical_direction_indicator(ax: Axes,
     direction_texts = {
         'toe': 'toe out <<                                          >> toe in',
         'camber': 'top in <<                                          >> top out',
-        'wheel_base': 'forwards <<                                      >> backwards'
+        'wheel_base': 'forwards <<                                      >> backwards',
+        'caster': 'rolling backward <<                        >> rolling forward'
     }
     
     text = direction_texts.get(direction_type, direction_type)

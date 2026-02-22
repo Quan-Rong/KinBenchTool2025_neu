@@ -8,7 +8,7 @@ import numpy as np
 from matplotlib.axes import Axes
 
 from .plot_utils import (
-    setup_axes_style, plot_data_curve, plot_fit_line,
+    setup_axes_style, plot_data_curve, plot_fit_line, plot_sample_points,
     add_fit_formula_text, add_direction_indicator,
     setup_legend, convert_matlab_color_to_python, add_custom_text
 )
@@ -24,7 +24,9 @@ def plot_roll_steer(ax_left: Axes,
                    fit_range: float = 1.0,
                    curve_color: Optional[str] = None,
                    fit_color: Optional[str] = None,
-                   compare_count: int = 0) -> None:
+                   compare_count: int = 0,
+                   show_sample_points_left: bool = False,
+                   show_sample_points_right: bool = False) -> None:
     """绘制Roll Steer图（左右对比）
     
     Args:
@@ -77,7 +79,7 @@ def plot_roll_steer(ax_left: Axes,
     
     # 转换颜色
     curve_color = convert_matlab_color_to_python(curve_color) if curve_color else None
-    fit_color = convert_matlab_color_to_python(fit_color) if fit_color else '#0000ff'
+    fit_color = convert_matlab_color_to_python(fit_color) if fit_color else None
     
     # 绘制左轮
     plot_data_curve(ax_left, roll_angle_wc, toe_left,
@@ -86,6 +88,9 @@ def plot_roll_steer(ax_left: Axes,
                  fit_range=(roll_angle_wc[fit_start], roll_angle_wc[fit_end-1]),
                  label=f'curve fitting [{-fit_range:.1f}°, {fit_range:.1f}°]',
                  color=fit_color, markevery=(0, fit_end-fit_start-1))
+    if show_sample_points_left:
+        plot_sample_points(ax_left, roll_angle_wc, toe_left,
+                          fit_start, fit_end, color=curve_color)
     
     setup_axes_style(ax_left,
                     xlabel='roll angle [°]',
@@ -102,6 +107,9 @@ def plot_roll_steer(ax_left: Axes,
                  fit_range=(roll_angle_wc[fit_start], roll_angle_wc[fit_end-1]),
                  label=f'curve fitting [{-fit_range:.1f}°, {fit_range:.1f}°]',
                  color=fit_color, markevery=(0, fit_end-fit_start-1))
+    if show_sample_points_right:
+        plot_sample_points(ax_right, roll_angle_wc, toe_right_neg,
+                          fit_start, fit_end, color=curve_color)
     
     setup_axes_style(ax_right,
                     xlabel='roll angle [°]',
@@ -117,7 +125,9 @@ def plot_roll_camber(ax_left: Axes,
                     fit_range: float = 1.0,
                     curve_color: Optional[str] = None,
                     fit_color: Optional[str] = None,
-                    compare_count: int = 0) -> None:
+                    compare_count: int = 0,
+                    show_sample_points_left: bool = False,
+                    show_sample_points_right: bool = False) -> None:
     """绘制Roll Camber图（左右对比）
     
     Args:
@@ -169,7 +179,7 @@ def plot_roll_camber(ax_left: Axes,
     
     # 转换颜色
     curve_color = convert_matlab_color_to_python(curve_color) if curve_color else None
-    fit_color = convert_matlab_color_to_python(fit_color) if fit_color else '#0000ff'
+    fit_color = convert_matlab_color_to_python(fit_color) if fit_color else None
     
     # 绘制左轮
     plot_data_curve(ax_left, roll_angle_wc, camber_left,
@@ -178,6 +188,9 @@ def plot_roll_camber(ax_left: Axes,
                  fit_range=(roll_angle_wc[fit_start], roll_angle_wc[fit_end-1]),
                  label=f'curve fitting [{-fit_range:.1f}°, {fit_range:.1f}°]',
                  color=fit_color, markevery=(0, fit_end-fit_start-1))
+    if show_sample_points_left:
+        plot_sample_points(ax_left, roll_angle_wc, camber_left,
+                          fit_start, fit_end, color=curve_color)
     
     setup_axes_style(ax_left,
                     xlabel='roll angle [°]',
@@ -194,6 +207,9 @@ def plot_roll_camber(ax_left: Axes,
                  fit_range=(roll_angle_wc[fit_start], roll_angle_wc[fit_end-1]),
                  label=f'curve fitting [{-fit_range:.1f}°, {fit_range:.1f}°]',
                  color=fit_color, markevery=(0, fit_end-fit_start-1))
+    if show_sample_points_right:
+        plot_sample_points(ax_right, roll_angle_wc, camber_right_neg,
+                          fit_start, fit_end, color=curve_color)
     
     setup_axes_style(ax_right,
                     xlabel='roll angle [°]',
@@ -209,7 +225,9 @@ def plot_roll_camber_relative_ground(ax_left: Axes,
                                     fit_range: float = 1.0,
                                     curve_color: Optional[str] = None,
                                     fit_color: Optional[str] = None,
-                                    compare_count: int = 0) -> None:
+                                    compare_count: int = 0,
+                                    show_sample_points_left: bool = False,
+                                    show_sample_points_right: bool = False) -> None:
     """绘制Roll Camber Relative Ground图（左右对比）
     
     Args:
@@ -265,7 +283,7 @@ def plot_roll_camber_relative_ground(ax_left: Axes,
     
     # 转换颜色
     curve_color = convert_matlab_color_to_python(curve_color) if curve_color else None
-    fit_color = convert_matlab_color_to_python(fit_color) if fit_color else '#0000ff'
+    fit_color = convert_matlab_color_to_python(fit_color) if fit_color else None
     
     # 绘制左轮
     plot_data_curve(ax_left, roll_angle_wc, camber_rel_ground_left,
@@ -274,6 +292,9 @@ def plot_roll_camber_relative_ground(ax_left: Axes,
                  fit_range=(roll_angle_wc[fit_start], roll_angle_wc[fit_end-1]),
                  label=f'curve fitting [{-fit_range:.1f}°, {fit_range:.1f}°]',
                  color=fit_color, markevery=(0, fit_end-fit_start-1))
+    if show_sample_points_left:
+        plot_sample_points(ax_left, roll_angle_wc, camber_rel_ground_left,
+                          fit_start, fit_end, color=curve_color)
     
     setup_axes_style(ax_left,
                     xlabel='roll angle [°]',
@@ -290,6 +311,9 @@ def plot_roll_camber_relative_ground(ax_left: Axes,
                  fit_range=(roll_angle_wc[fit_start], roll_angle_wc[fit_end-1]),
                  label=f'curve fitting [{-fit_range:.1f}°, {fit_range:.1f}°]',
                  color=fit_color, markevery=(0, fit_end-fit_start-1))
+    if show_sample_points_right:
+        plot_sample_points(ax_right, roll_angle_wc, camber_rel_ground_right_neg,
+                          fit_start, fit_end, color=curve_color)
     
     setup_axes_style(ax_right,
                     xlabel='roll angle [°]',

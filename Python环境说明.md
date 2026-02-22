@@ -38,7 +38,7 @@ python -c "import numpy, pandas, matplotlib, PyQt6, yaml, PIL, imageio; print('A
 .\venv\Scripts\Activate.ps1
 
 # 运行主程序
-python Python_Target/src/main.py
+python main.py
 ```
 
 ### 停用虚拟环境

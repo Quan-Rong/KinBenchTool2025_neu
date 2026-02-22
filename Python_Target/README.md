@@ -105,7 +105,7 @@ python Python_Target/test_parser.py
 ### 3. 运行主程序
 
 ```bash
-python Python_Target/src/main.py
+python main.py
 ```
 
 ## 使用示例

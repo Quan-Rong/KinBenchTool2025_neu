@@ -5,13 +5,7 @@
 ### 方法1: 直接运行
 
 ```bash
-python Python_Target/src/main.py
-```
-
-### 方法2: 作为模块运行
-
-```bash
-python -m Python_Target.src.main
+python main.py
 ```
 
 ## 基本使用流程

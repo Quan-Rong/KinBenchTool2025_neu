@@ -130,7 +130,7 @@ pylint Python_Target/src
 mypy Python_Target/src
 
 # 功能测试
-python Python_Target/src/main.py
+python main.py
 ```
 
 ### 5. 提交更改

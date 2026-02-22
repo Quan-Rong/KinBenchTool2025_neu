@@ -5,7 +5,7 @@
 
 from typing import Dict, Optional
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-                            QDoubleSpinBox, QGroupBox, QGridLayout)
+                            QDoubleSpinBox, QGroupBox, QGridLayout, QComboBox, QSizePolicy)
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 
@@ -35,15 +35,17 @@ class VehicleParamsPanel(QWidget):
     def setup_ui(self):
         """设置UI界面"""
         layout = QVBoxLayout()
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(12)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(16)
         
         # 创建参数组
         params_group = QGroupBox("Vehicle Parameters")
-        params_group.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        params_group.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
         params_layout = QGridLayout()
-        params_layout.setSpacing(12)
-        params_layout.setColumnStretch(1, 1)
+        params_layout.setSpacing(14)
+        params_layout.setColumnStretch(0, 0)  # 标签列不拉伸
+        params_layout.setColumnStretch(1, 1)  # 输入框列可拉伸
+        params_layout.setColumnMinimumWidth(1, 160)  # 输入框列最小宽度
         
         # 定义参数列表
         self.param_widgets = {}
@@ -62,14 +64,14 @@ class VehicleParamsPanel(QWidget):
         
         row = 0
         for key, label, unit, min_val, max_val, default_val in params_def:
-            # 标签 - 现代化样式
+            # 标签 - 现代化样式，优化大小
             param_label = QLabel(f"{label}:")
             param_label.setMinimumWidth(130)
             param_label.setFont(QFont("Segoe UI", 10))
-            param_label.setStyleSheet("color: #475569; font-weight: 500;")
+            param_label.setStyleSheet("color: #475569; font-weight: 500; padding: 4px 0px;")
             params_layout.addWidget(param_label, row, 0)
             
-            # 输入框 - 现代化样式
+            # 输入框 - 现代化样式，优化大小
             spinbox = QDoubleSpinBox()
             spinbox.setMinimum(min_val)
             spinbox.setMaximum(max_val)
@@ -78,6 +80,10 @@ class VehicleParamsPanel(QWidget):
             spinbox.setSuffix(f" {unit}")
             spinbox.valueChanged.connect(self._on_param_changed)
             spinbox.setFont(QFont("Segoe UI", 10))
+            # 设置输入框最小宽度，确保能显示完整内容（包括单位）
+            spinbox.setMinimumWidth(160)
+            spinbox.setMinimumHeight(24)
+            spinbox.setMaximumHeight(28)
             params_layout.addWidget(spinbox, row, 1)
             
             self.param_widgets[key] = spinbox

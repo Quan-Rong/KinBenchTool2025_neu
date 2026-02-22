@@ -76,10 +76,7 @@ pip install -r requirements-dev.txt
 
 ```bash
 # 运行主程序
-python Python_Target/src/main.py
-
-# 或作为模块运行
-python -m Python_Target.src.main
+python main.py
 ```
 
 ### 开发
@@ -184,8 +181,8 @@ mypy Python_Target/src
 
 ## 版本信息
 
-- **当前版本**: 0.1.1
-- **发布日期**: 2025-01-27
+- **当前版本**: 0.2.0
+- **发布日期**: 2025-02-15
 - **查看变更**: [CHANGELOG.md](CHANGELOG.md)
 
 ## 许可证
@@ -204,5 +201,5 @@ mypy Python_Target/src
 
 ---
 
-**最后更新**: 2025-01-27  
-**当前版本**: 0.1.1
+**最后更新**: 2025-02-15  
+**当前版本**: 0.2.0
