@@ -18,6 +18,32 @@ main (生产分支)
 - **bugfix/**: 紧急bug修复分支，从main或develop创建
 - **release/**: 发布准备分支，从develop创建，用于版本发布前的最终测试
 
+## Git 编码配置
+
+### 重要：避免提交消息乱码
+
+为了确保中文提交消息在 GitHub 上正确显示，必须配置 Git 使用 UTF-8 编码：
+
+```bash
+# 配置提交消息编码为 UTF-8
+git config --global i18n.commitencoding utf-8
+
+# 配置日志输出编码为 UTF-8
+git config --global i18n.logoutputencoding utf-8
+
+# 禁用路径引用转义（避免中文路径显示为转义序列）
+git config --global core.quotepath false
+```
+
+### 验证配置
+
+```bash
+git config --global --get i18n.commitencoding
+# 应该输出: utf-8
+```
+
+**注意**：这些配置已经全局设置，未来的提交不会再出现乱码问题。
+
 ## 提交信息规范（Conventional Commits）
 
 ### 格式
