@@ -555,7 +555,8 @@ class BaseTestTab(QWidget):
         """加载并处理文件"""
         file_path = self.file_path_edit.text()
         if not file_path or not Path(file_path).exists():
-            QMessageBox.warning(self, "Error", "Please select a valid .res file!")
+            from ..utils.error_handler import ErrorHandler
+            ErrorHandler.show_warning(self, "错误", "请选择一个有效的.res文件！", language='zh')
             return
         
         # 创建进度对话框
@@ -613,20 +614,15 @@ class BaseTestTab(QWidget):
             progress.setLabelText("Complete!")
             self.status_message.emit(f"File loaded: {Path(file_path).name}", 3000)
             
-        except FileNotFoundError:
-            QMessageBox.critical(self, "Error", f"File not found:\n{file_path}")
-            logger.error(f"文件不存在: {file_path}")
-        except PermissionError:
-            QMessageBox.critical(self, "Error", f"Permission denied:\n{file_path}")
-            logger.error(f"文件权限错误: {file_path}")
+        except FileNotFoundError as e:
+            from ..utils.error_handler import ErrorHandler
+            ErrorHandler.handle_exception(self, e, context=f"加载文件: {file_path}", language='zh')
+        except PermissionError as e:
+            from ..utils.error_handler import ErrorHandler
+            ErrorHandler.handle_exception(self, e, context=f"访问文件: {file_path}", language='zh')
         except Exception as e:
-            error_msg = str(e)
-            if len(error_msg) > 200:
-                error_msg = error_msg[:200] + "..."
-            QMessageBox.critical(
-                self, "Error", 
-                f"Failed to load file:\n{error_msg}\n\nPlease check the file format and try again.")
-            logger.error(f"文件加载失败: {e}", exc_info=True)
+            from ..utils.error_handler import ErrorHandler
+            ErrorHandler.handle_exception(self, e, context=f"处理文件: {file_path}", language='zh')
         finally:
             progress.close()
             self.setCursor(Qt.CursorShape.ArrowCursor)
@@ -672,7 +668,8 @@ class BaseTestTab(QWidget):
         file_path = widget['file_path']
         
         if not file_path or not Path(file_path).exists():
-            QMessageBox.warning(self, "Error", "Please select a valid .res file!")
+            from ..utils.error_handler import ErrorHandler
+            ErrorHandler.show_warning(self, "错误", "请选择一个有效的.res文件！", language='zh')
             return
         
         # 创建进度对话框
@@ -715,13 +712,8 @@ class BaseTestTab(QWidget):
             self.status_message.emit(f"Comparison file {index+1} loaded: {Path(file_path).name}", 3000)
             
         except Exception as e:
-            error_msg = str(e)
-            if len(error_msg) > 200:
-                error_msg = error_msg[:200] + "..."
-            QMessageBox.critical(
-                self, "Error", 
-                f"Failed to load comparison file:\n{error_msg}\n\nPlease check the file format and try again.")
-            logger.error(f"比较文件加载失败: {e}", exc_info=True)
+            from ..utils.error_handler import ErrorHandler
+            ErrorHandler.handle_exception(self, e, context=f"加载对比文件: {file_path}", language='zh')
         finally:
             progress.close()
             self.setCursor(Qt.CursorShape.ArrowCursor)
@@ -1002,17 +994,20 @@ class BaseTestTab(QWidget):
     
     def _on_positive_direction(self):
         """Positive Direction按钮回调（功能未实现，但UI存在）"""
-        QMessageBox.information(self, "Info", "Positive Direction功能尚未实现")
+        from ..utils.error_handler import ErrorHandler
+        ErrorHandler.show_info(self, "提示", "Positive Direction功能尚未实现")
         logger.info("Positive Direction按钮点击（功能未实现）")
     
     def _on_custom_plot(self):
         """自定义绘图按钮回调（功能未实现，但UI存在）"""
-        QMessageBox.information(self, "Info", "Custom Plot功能尚未实现")
+        from ..utils.error_handler import ErrorHandler
+        ErrorHandler.show_info(self, "提示", "Custom Plot功能尚未实现")
         logger.info("Custom Plot按钮点击（功能未实现）")
     
     def _on_export_ppt(self):
         """导出PPT按钮回调（功能未实现，但UI存在）"""
-        QMessageBox.information(self, "Info", "Export to PPT功能尚未实现")
+        from ..utils.error_handler import ErrorHandler
+        ErrorHandler.show_info(self, "提示", "Export to PPT功能尚未实现")
         logger.info("Export to PPT按钮点击（功能未实现）")
 
 
@@ -1621,8 +1616,8 @@ class BumpTestTab(BaseTestTab):
             }
             
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to process data:\n{str(e)}")
-            logger.error(f"数据处理失败: {e}", exc_info=True)
+            from ..utils.error_handler import ErrorHandler
+            ErrorHandler.handle_exception(self, e, context="处理数据", language='zh')
             return None
     
     def update_plots(self):
@@ -2065,8 +2060,8 @@ class RollTestTab(BaseTestTab):
             }
             
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to process data:\n{str(e)}")
-            logger.error(f"数据处理失败: {e}", exc_info=True)
+            from ..utils.error_handler import ErrorHandler
+            ErrorHandler.handle_exception(self, e, context="处理数据", language='zh')
             return None
     
     def update_plots(self):
@@ -2326,8 +2321,8 @@ class StaticLoadLateralTab(BaseTestTab):
             self.update_plots()
             
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to process data:\n{str(e)}")
-            logger.error(f"数据处理失败: {e}", exc_info=True)
+            from ..utils.error_handler import ErrorHandler
+            ErrorHandler.handle_exception(self, e, context="处理数据", language='zh')
     
     def update_plots(self):
         """更新图表"""
@@ -2490,8 +2485,8 @@ class StaticLoadBrakingTab(BaseTestTab):
             self.update_plots()
             
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to process data:\n{str(e)}")
-            logger.error(f"数据处理失败: {e}", exc_info=True)
+            from ..utils.error_handler import ErrorHandler
+            ErrorHandler.handle_exception(self, e, context="处理数据", language='zh')
     
     def update_plots(self):
         """更新图表"""
@@ -2634,8 +2629,8 @@ class StaticLoadAccelerationTab(BaseTestTab):
             self.update_plots()
             
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to process data:\n{str(e)}")
-            logger.error(f"数据处理失败: {e}", exc_info=True)
+            from ..utils.error_handler import ErrorHandler
+            ErrorHandler.handle_exception(self, e, context="处理数据", language='zh')
     
     def update_plots(self):
         """更新图表"""

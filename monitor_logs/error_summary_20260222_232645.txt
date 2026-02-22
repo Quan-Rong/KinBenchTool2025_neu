@@ -1,0 +1,26 @@
+================================================================================
+程序运行错误报告
+生成时间: 2026-02-22 23:26:45.400302
+================================================================================
+
+总错误数: 0
+总异常数: 1
+
+================================================================================
+异常列表:
+================================================================================
+
+
+异常 #1:
+时间: 2026-02-22T23:26:45.399844
+类型: ModuleNotFoundError
+消息: No module named 'PyQt6'
+堆栈跟踪:
+Traceback (most recent call last):
+  File "C:\CAE\Cursor_Test\KinBenchTool2025_neu\monitor_run_improved.py", line 148, in <module>
+    from main import main
+  File "C:\CAE\Cursor_Test\KinBenchTool2025_neu\main.py", line 18, in <module>
+    from PyQt6.QtWidgets import QApplication
+ModuleNotFoundError: No module named 'PyQt6'
+
+--------------------------------------------------------------------------------

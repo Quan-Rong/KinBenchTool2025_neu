@@ -6,6 +6,7 @@
 import os
 import platform
 import subprocess
+import shutil
 from pathlib import Path
 from typing import Optional, List
 
@@ -13,6 +14,24 @@ from .exceptions import FileError
 from .logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def _check_perl_available() -> bool:
+    """检查Perl是否可用
+    
+    Returns:
+        如果Perl可用返回True，否则返回False
+    """
+    try:
+        result = subprocess.run(
+            ['perl', '--version'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=2
+        )
+        return result.returncode == 0
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return False
 
 
 def count_lines(file_path: str) -> int:
@@ -39,54 +58,67 @@ def count_lines(file_path: str) -> int:
     
     system = platform.system()
     
-    try:
-        if system == "Windows":
-            # Windows系统使用Perl脚本
-            perl_script = """
+    # Windows系统：检查Perl是否可用
+    if system == "Windows":
+        if _check_perl_available():
+            try:
+                perl_script = """
 while (<>) {};
 print $.,"\\n";
 """
-            # 创建临时Perl脚本
-            temp_script = file_path.parent / "countlines_temp.pl"
+                # 创建临时Perl脚本
+                temp_script = file_path.parent / "countlines_temp.pl"
+                try:
+                    with open(temp_script, 'w', encoding='utf-8') as f:
+                        f.write(perl_script)
+                    
+                    # 执行Perl脚本
+                    result = subprocess.run(
+                        ['perl', str(temp_script), str(file_path)],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        universal_newlines=True,
+                        check=True,
+                        timeout=30
+                    )
+                    line_count = int(result.stdout.strip())
+                    logger.debug(f"使用Perl脚本统计行数: {line_count}")
+                    return line_count
+                finally:
+                    # 清理临时脚本
+                    if temp_script.exists():
+                        temp_script.unlink()
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ValueError) as e:
+                logger.debug(f"Perl脚本执行失败，使用Python方式: {e}")
+                return _count_lines_python(file_path)
+        else:
+            # Perl不可用，直接使用Python方式
+            logger.debug("Perl不可用，使用Python方式统计行数")
+            return _count_lines_python(file_path)
+    
+    # Linux/Mac系统：使用wc命令
+    else:
+        # 检查wc命令是否可用
+        if shutil.which('wc') is not None:
             try:
-                with open(temp_script, 'w', encoding='utf-8') as f:
-                    f.write(perl_script)
-                
-                # 执行Perl脚本（兼容旧版Python）
                 result = subprocess.run(
-                    ['perl', str(temp_script), str(file_path)],
+                    ['wc', '-l', str(file_path)],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     universal_newlines=True,
-                    check=True
+                    check=True,
+                    timeout=30
                 )
-                line_count = int(result.stdout.strip())
-                logger.debug(f"使用Perl脚本统计行数: {line_count}")
+                line_count = int(result.stdout.split()[0])
+                logger.debug(f"使用wc命令统计行数: {line_count}")
                 return line_count
-            finally:
-                # 清理临时脚本
-                if temp_script.exists():
-                    temp_script.unlink()
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ValueError) as e:
+                logger.debug(f"wc命令执行失败，使用Python方式: {e}")
+                return _count_lines_python(file_path)
         else:
-            # Linux/Mac系统使用wc命令（兼容旧版Python）
-            result = subprocess.run(
-                ['wc', '-l', str(file_path)],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                universal_newlines=True,
-                check=True
-            )
-            line_count = int(result.stdout.split()[0])
-            logger.debug(f"使用wc命令统计行数: {line_count}")
-            return line_count
-    except subprocess.CalledProcessError as e:
-        raise FileError(f"执行行数统计命令失败: {e}")
-    except ValueError as e:
-        raise FileError(f"解析行数失败: {e}")
-    except Exception as e:
-        # 如果命令执行失败，回退到Python方式（较慢但可靠）
-        logger.warning(f"使用系统命令统计行数失败，回退到Python方式: {e}")
-        return _count_lines_python(file_path)
+            # wc不可用，直接使用Python方式
+            logger.debug("wc命令不可用，使用Python方式统计行数")
+            return _count_lines_python(file_path)
 
 
 def _count_lines_python(file_path: Path) -> int:
