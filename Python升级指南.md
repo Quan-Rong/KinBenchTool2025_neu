@@ -101,7 +101,7 @@ pip install -r requirements.txt
 python -c "import PyQt6; import numpy; import matplotlib; print('所有依赖安装成功！')"
 
 # 运行程序
-python Python_Target/src/main.py
+python main.py
 ```
 
 ## 常见问题
@@ -125,7 +125,7 @@ python Python_Target/src/main.py
 - 使用 `py` launcher（如果已安装）：
   ```powershell
   py -3.11 --version
-  py -3.11 Python_Target/src/main.py
+  py -3.11 main.py
   ```
 - 或者使用完整路径调用特定版本
 
@@ -164,7 +164,7 @@ pip install PyQt6
 - [ ] 可以导入 PyQt6: `python -c "import PyQt6"`
 - [ ] 可以导入 numpy: `python -c "import numpy"`
 - [ ] 可以导入 matplotlib: `python -c "import matplotlib"`
-- [ ] 项目可以正常启动: `python Python_Target/src/main.py`
+- [ ] 项目可以正常启动: `python main.py`
 
 ## 需要帮助？
 

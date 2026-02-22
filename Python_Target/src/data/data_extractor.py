@@ -122,3 +122,46 @@ class DataExtractor:
         filtered = data[condition]
         logger.debug(f"数据筛选: {len(data)} -> {len(filtered)}")
         return filtered
+    
+    def extract_wheel_travel_left_right(self, convert_length: bool = False) -> tuple:
+        """提取左右轮的wheel_travel数据
+        
+        在bump测试中，左右轮的wheel_travel应该相同（都使用wheel_travel_ID(1)的数据）
+        
+        Args:
+            convert_length: 是否将长度从毫米转换为米
+            
+        Returns:
+            (wheel_travel_left, wheel_travel_right): 左右轮的wheel_travel数据（相同）
+        """
+        wheel_travel_ids = self.parser.get_param_id('wheel_travel')
+        if isinstance(wheel_travel_ids, list) and len(wheel_travel_ids) >= 1:
+            # 左右轮都使用第一个ID的数据（wheel_travel_ID(1)）
+            wheel_travel_data = self.extract_by_id(wheel_travel_ids[0], convert_length=convert_length)
+            # 确保是一维数组
+            if wheel_travel_data.ndim > 1:
+                # 如果是多维的，取vertical分量（第二列）
+                wheel_travel_data = wheel_travel_data[:, 1] if wheel_travel_data.shape[1] > 1 else wheel_travel_data[:, 0]
+            if wheel_travel_data.ndim > 1:
+                wheel_travel_data = wheel_travel_data.flatten()
+            # 左右轮使用相同的数据
+            wheel_travel_left = wheel_travel_data
+            wheel_travel_right = wheel_travel_data
+        else:
+            # 如果只有一个ID，则左右轮使用相同的数据
+            wheel_travel_data = self.extract_by_name('wheel_travel', convert_length=convert_length)
+            if wheel_travel_data.ndim > 1:
+                # 如果是多维的，取vertical分量（第二列）
+                wheel_travel_left = wheel_travel_data[:, 1] if wheel_travel_data.shape[1] > 1 else wheel_travel_data[:, 0]
+                wheel_travel_right = wheel_travel_left  # 左右轮相同
+            else:
+                wheel_travel_left = wheel_travel_data
+                wheel_travel_right = wheel_travel_data
+            
+            # 确保是一维数组
+            if wheel_travel_left.ndim > 1:
+                wheel_travel_left = wheel_travel_left.flatten()
+            if wheel_travel_right.ndim > 1:
+                wheel_travel_right = wheel_travel_right.flatten()
+        
+        return wheel_travel_left, wheel_travel_right

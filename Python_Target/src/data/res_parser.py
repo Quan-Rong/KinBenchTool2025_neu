@@ -107,7 +107,7 @@ class ResParser:
             'ride_rate': ('ride_rate', 2, 'left/right'),
             'left_tire_forces': ('left_tire_forces', 3, 'x/y/z'),
             'right_tire_forces': ('right_tire_forces', 3, 'x/y/z'),
-            'wheel_travel': ('wheel_travel', 2, 'lateral/vertical'),
+            'wheel_travel': ('"wheel_travel"', 2, 'lateral/vertical'),
             'roll_angle': ('roll_angle', 2, 'WC/CP'),
             'wheel_load_lateral': ('wheel_load_lateral', 2, 'left/right'),
             'wheel_load_longitudinal': ('wheel_load_longitudinal', 4, 'brak_left/brak_right/driv_left/driv_right'),
@@ -167,6 +167,7 @@ class ResParser:
         
         data_rows = []
         file_gen = read_file_generator(str(self.file_path))
+        warning_issued = False  # 标记是否已发出警告，避免重复输出
         
         for line in file_gen:
             # 检查是否是quasiStatic标记（支持两种格式）
@@ -204,8 +205,11 @@ class ResParser:
                     if len(test_data) >= 2751:
                         data_rows.append(test_data[:2751])
                     else:
-                        # 如果不足2751，记录警告但不填充（可能是数据格式问题）
-                        logger.warning(f"数据行长度不足2751，实际长度: {len(test_data)}")
+                        # 如果不足2751，只在第一次出现时记录警告，避免重复输出
+                        if not warning_issued:
+                            logger.warning(f"数据行长度不足2751，实际长度: {len(test_data)}。"
+                                         f"后续相同情况将不再提示。")
+                            warning_issued = True
                         # 仍然添加，但用0填充到2751
                         padded = test_data + [0.0] * (2751 - len(test_data))
                         data_rows.append(padded)

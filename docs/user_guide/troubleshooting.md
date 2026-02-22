@@ -55,7 +55,7 @@ venv\Scripts\activate     # Windows
 #### 启动命令
 
 ```bash
-python Python_Target/src/main.py
+python main.py
 ```
 
 **常见错误**:

@@ -27,6 +27,10 @@ from .bump_plot import (
     plot_wheel_rate,
     plot_wheel_recession,
     plot_track_change,
+    plot_bump_caster,
+    plot_bump_side_swing_arm_angle,
+    plot_bump_side_swing_arm_length,
+    plot_bump_wheel_load,
 )
 
 # Roll测试绘图
@@ -67,6 +71,10 @@ __all__ = [
     'plot_wheel_rate',
     'plot_wheel_recession',
     'plot_track_change',
+    'plot_bump_caster',
+    'plot_bump_side_swing_arm_angle',
+    'plot_bump_side_swing_arm_length',
+    'plot_bump_wheel_load',
     # Roll测试绘图
     'plot_roll_steer',
     'plot_roll_camber',

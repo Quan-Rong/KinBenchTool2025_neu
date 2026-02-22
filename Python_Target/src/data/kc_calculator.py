@@ -9,6 +9,26 @@ import numpy as np
 from .data_extractor import DataExtractor
 from .unit_converter import convert_angle_array, convert_length_array
 from ..utils.math_utils import linear_fit, find_zero_crossing, find_value_index, calculate_slope
+
+
+def _find_fit_range_indices_by_value(force_arr: np.ndarray, fit_range: float) -> Tuple[int, int]:
+    """按力值查找拟合区间索引，与MATLAB逻辑完全一致
+    
+    MATLAB: Row_No_p1=min(abs(force+fit_range)), Row_No_p2=min(abs(force-fit_range))
+    fit_range: kN（如1.0表示±1kN）
+    
+    Returns:
+        (fit_start, fit_end): 用于切片 force_arr[fit_start:fit_end]
+    """
+    idx_neg = find_value_index(force_arr, -fit_range)
+    idx_pos = find_value_index(force_arr, fit_range)
+    if idx_neg is None:
+        idx_neg = 0
+    if idx_pos is None:
+        idx_pos = len(force_arr) - 1
+    fit_start = min(idx_neg, idx_pos)
+    fit_end = max(idx_neg, idx_pos) + 1
+    return fit_start, fit_end
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -75,16 +95,9 @@ class KCCalculator:
         logger.debug("计算Bump Steer")
         
         # 提取数据
-        wheel_travel_left = self.extractor.extract_by_name('wheel_travel', convert_length=True)
-        wheel_travel_right = self.extractor.extract_by_name('wheel_travel', convert_length=True)
+        wheel_travel_left, wheel_travel_right = self.extractor.extract_wheel_travel_left_right(convert_length=True)
         toe_angle_left = self.extractor.extract_by_name('toe_angle', convert_angle=True)
         toe_angle_right = self.extractor.extract_by_name('toe_angle', convert_angle=True)
-        
-        # 如果wheel_travel是多维的，取垂直方向（通常是第二列）
-        if wheel_travel_left.ndim > 1:
-            wheel_travel_left = wheel_travel_left[:, 1] if wheel_travel_left.shape[1] > 1 else wheel_travel_left[:, 0]
-        if wheel_travel_right.ndim > 1:
-            wheel_travel_right = wheel_travel_right[:, 1] if wheel_travel_right.shape[1] > 1 else wheel_travel_right[:, 0]
         
         # 如果toe_angle是多维的，取第一列（左轮）
         if toe_angle_left.ndim > 1:
@@ -150,16 +163,9 @@ class KCCalculator:
         logger.debug("计算Bump Camber")
         
         # 提取数据
-        wheel_travel_left = self.extractor.extract_by_name('wheel_travel', convert_length=True)
-        wheel_travel_right = self.extractor.extract_by_name('wheel_travel', convert_length=True)
+        wheel_travel_left, wheel_travel_right = self.extractor.extract_wheel_travel_left_right(convert_length=True)
         camber_left = self.extractor.extract_by_name('camber_angle', convert_angle=True)
         camber_right = self.extractor.extract_by_name('camber_angle', convert_angle=True)
-        
-        # 处理多维数据
-        if wheel_travel_left.ndim > 1:
-            wheel_travel_left = wheel_travel_left[:, 1] if wheel_travel_left.shape[1] > 1 else wheel_travel_left[:, 0]
-        if wheel_travel_right.ndim > 1:
-            wheel_travel_right = wheel_travel_right[:, 1] if wheel_travel_right.shape[1] > 1 else wheel_travel_right[:, 0]
         
         if camber_left.ndim > 1:
             camber_left = camber_left[:, 0]
@@ -224,16 +230,9 @@ class KCCalculator:
         logger.debug("计算Wheel Rate")
         
         # 提取数据
-        wheel_travel_left = self.extractor.extract_by_name('wheel_travel', convert_length=True)
-        wheel_travel_right = self.extractor.extract_by_name('wheel_travel', convert_length=True)
+        wheel_travel_left, wheel_travel_right = self.extractor.extract_wheel_travel_left_right(convert_length=True)
         wheel_rate_left = self.extractor.extract_by_name('wheel_rate')
         wheel_rate_right = self.extractor.extract_by_name('wheel_rate')
-        
-        # 处理多维数据
-        if wheel_travel_left.ndim > 1:
-            wheel_travel_left = wheel_travel_left[:, 1] if wheel_travel_left.shape[1] > 1 else wheel_travel_left[:, 0]
-        if wheel_travel_right.ndim > 1:
-            wheel_travel_right = wheel_travel_right[:, 1] if wheel_travel_right.shape[1] > 1 else wheel_travel_right[:, 0]
         
         if wheel_rate_left.ndim > 1:
             wheel_rate_left = wheel_rate_left[:, 0]
@@ -307,16 +306,9 @@ class KCCalculator:
         logger.debug("计算Wheel Recession")
         
         # 提取数据
-        wheel_travel_left = self.extractor.extract_by_name('wheel_travel', convert_length=True)
-        wheel_travel_right = self.extractor.extract_by_name('wheel_travel', convert_length=True)
+        wheel_travel_left, wheel_travel_right = self.extractor.extract_wheel_travel_left_right(convert_length=True)
         wheel_travel_base_left = self.extractor.extract_by_name('wheel_travel_base', convert_length=True)
         wheel_travel_base_right = self.extractor.extract_by_name('wheel_travel_base', convert_length=True)
-        
-        # 处理多维数据
-        if wheel_travel_left.ndim > 1:
-            wheel_travel_left = wheel_travel_left[:, 1] if wheel_travel_left.shape[1] > 1 else wheel_travel_left[:, 0]
-        if wheel_travel_right.ndim > 1:
-            wheel_travel_right = wheel_travel_right[:, 1] if wheel_travel_right.shape[1] > 1 else wheel_travel_right[:, 0]
         
         if wheel_travel_base_left.ndim > 1:
             wheel_travel_base_left = wheel_travel_base_left[:, 0]
@@ -382,11 +374,11 @@ class KCCalculator:
         """
         logger.debug("计算Track Change")
         
-        # 提取数据
-        wheel_travel_left = self.extractor.extract_by_name('wheel_travel', convert_length=True)
+        # 提取数据 - 根据Matlab代码，track change使用tire_contact_point的track分量（Y方向）
+        wheel_travel_left, _ = self.extractor.extract_wheel_travel_left_right(convert_length=True)
         wheel_travel_right = self.extractor.extract_by_name('wheel_travel', convert_length=True)
-        wheel_travel_track_left = self.extractor.extract_by_name('wheel_travel_track', convert_length=True)
-        wheel_travel_track_right = self.extractor.extract_by_name('wheel_travel_track', convert_length=True)
+        left_tire_contact = self.extractor.extract_by_name('left_tire_contact_point', convert_length=True)
+        right_tire_contact = self.extractor.extract_by_name('right_tire_contact_point', convert_length=True)
         
         # 处理多维数据
         if wheel_travel_left.ndim > 1:
@@ -394,16 +386,22 @@ class KCCalculator:
         if wheel_travel_right.ndim > 1:
             wheel_travel_right = wheel_travel_right[:, 1] if wheel_travel_right.shape[1] > 1 else wheel_travel_right[:, 0]
         
-        if wheel_travel_track_left.ndim > 1:
-            wheel_travel_track_left = wheel_travel_track_left[:, 0]
-        if wheel_travel_track_right.ndim > 1:
-            wheel_travel_track_right = wheel_travel_track_right[:, 1] if wheel_travel_track_right.shape[1] > 1 else wheel_travel_track_right[:, 0]
+        # tire_contact_point: 第0列是base，第1列是track（Y方向）
+        if left_tire_contact.ndim > 1:
+            wheel_centre_y_left = left_tire_contact[:, 1]  # track分量（Y方向）
+        else:
+            wheel_centre_y_left = left_tire_contact
+            
+        if right_tire_contact.ndim > 1:
+            wheel_centre_y_right = right_tire_contact[:, 1]  # track分量（Y方向）
+        else:
+            wheel_centre_y_right = right_tire_contact
         
         # 转换单位
         wheel_travel_left_mm = wheel_travel_left * 1000
         wheel_travel_right_mm = wheel_travel_right * 1000
-        wheel_travel_track_left_mm = wheel_travel_track_left * 1000
-        wheel_travel_track_right_mm = wheel_travel_track_right * 1000
+        wheel_centre_y_left_mm = wheel_centre_y_left * 1000
+        wheel_centre_y_right_mm = wheel_centre_y_right * 1000
         
         # 查找零位置
         if zero_position_idx is None:
@@ -417,18 +415,19 @@ class KCCalculator:
         fit_start = max(0, zero_idx - fit_range)
         fit_end = min(len(wheel_travel_left), zero_idx + fit_range + 1)
         
-        # 左轮拟合
+        # 左轮拟合 - X轴是wheel_travel，Y轴是wheel_centre_y
         x_left = wheel_travel_left_mm[fit_start:fit_end]
-        y_left = wheel_travel_track_left_mm[fit_start:fit_end]
+        y_left = wheel_centre_y_left_mm[fit_start:fit_end]
         coeffs_left, _ = linear_fit(x_left, y_left, degree=1)
         
-        # 右轮拟合
+        # 右轮拟合 - X轴是wheel_travel，Y轴是wheel_centre_y
         x_right = wheel_travel_right_mm[fit_start:fit_end]
-        y_right = wheel_travel_track_right_mm[fit_start:fit_end]
+        y_right = wheel_centre_y_right_mm[fit_start:fit_end]
         coeffs_right, _ = linear_fit(x_right, y_right, degree=1)
         
         # 计算斜率（mm/m）
-        slope_left = coeffs_left[0] * 1000
+        # 注意：根据Matlab代码，左轮斜率需要取负值
+        slope_left = -coeffs_left[0] * 1000  # 左轮取负
         slope_right = coeffs_right[0] * 1000
         slope_avg = (slope_left + slope_right) / 2
         
@@ -481,50 +480,46 @@ class KCCalculator:
     
     def calculate_2g_wheel_travel_and_rate(self,
                                            target_load: float = 2.0,
-                                           half_load: Optional[float] = None) -> Dict[str, float]:
+                                           max_load: Optional[float] = None) -> Dict[str, float]:
         """计算2g载荷时的轮跳行程和车轮刚度
         
+        根据Matlab代码：Row_No2g=min(abs(Susp_parallel_travel_data1(:,end-1)-Wheel_Load*2))
+        使用max_load*2作为目标载荷
+        
         Args:
-            target_load: 目标载荷（g），默认2.0
-            half_load: 半载质量（kg），如果为None则从vehicle_params获取
+            target_load: 目标载荷倍数（g），默认2.0
+            max_load: 满载质量（kg），如果为None则从vehicle_params获取
             
         Returns:
             包含2g载荷时轮跳行程和车轮刚度的字典
         """
         logger.debug(f"计算{target_load}g载荷时的轮跳行程和车轮刚度")
         
-        # 获取半载质量
-        if half_load is None:
-            half_load = self.get_vehicle_param('half_load', 0.0)
+        # 获取满载质量（根据Matlab代码使用MaxLoad）
+        if max_load is None:
+            max_load = self.get_vehicle_param('max_load', 0.0)
         
-        wheel_travel_left = self.extractor.extract_by_name('wheel_travel', convert_length=True)
-        wheel_travel_right = self.extractor.extract_by_name('wheel_travel', convert_length=True)
+        wheel_travel_left, wheel_travel_right = self.extractor.extract_wheel_travel_left_right(convert_length=True)
         wheel_load_left = self.extractor.extract_by_name('wheel_load_vertical_force')
         wheel_load_right = self.extractor.extract_by_name('wheel_load_vertical_force')
-        
-        # 处理多维数据
-        if wheel_travel_left.ndim > 1:
-            wheel_travel_left = wheel_travel_left[:, 1] if wheel_travel_left.shape[1] > 1 else wheel_travel_left[:, 0]
-        if wheel_travel_right.ndim > 1:
-            wheel_travel_right = wheel_travel_right[:, 1] if wheel_travel_right.shape[1] > 1 else wheel_travel_right[:, 0]
         
         if wheel_load_left.ndim > 1:
             wheel_load_left = wheel_load_left[:, 0]
         if wheel_load_right.ndim > 1:
             wheel_load_right = wheel_load_right[:, 1] if wheel_load_right.shape[1] > 1 else wheel_load_right[:, 0]
         
-        # 计算目标载荷（N）
-        target_force = target_load * 9.81 * half_load / 2  # 单轮载荷
+        # 计算目标载荷（N）- 根据Matlab：Wheel_Load*2，其中Wheel_Load=Input_MaxLoad*9.8/2
+        wheel_load = max_load * 9.8 / 2  # 单轮满载载荷
+        target_force = wheel_load * target_load  # 2g载荷
         
-        # 查找最接近目标载荷的索引
-        load_combined = (wheel_load_left + wheel_load_right) / 2
-        idx_2g = find_value_index(load_combined, target_force)
+        # 查找最接近目标载荷的索引（使用左轮载荷）
+        idx_2g = find_value_index(wheel_load_left, target_force)
         
         if idx_2g is None:
             logger.warning(f"未找到{target_load}g载荷位置")
             return {}
         
-        # 获取轮跳行程（mm）
+        # 获取轮跳行程（mm）- 使用左轮垂直行程
         travel_2g = wheel_travel_left[idx_2g] * 1000  # m -> mm
         
         # 获取车轮刚度（N/mm）
@@ -545,6 +540,276 @@ class KCCalculator:
             'wheel_rate_2g': rate_2g,
             'target_load': target_load,
             'index': idx_2g
+        }
+    
+    def calculate_bump_caster(self,
+                             fit_range: int = 15,
+                             zero_position_idx: Optional[int] = None) -> Dict[str, float]:
+        """计算Bump Caster（轮跳主销后倾）
+        
+        Args:
+            fit_range: 拟合区间范围（mm），默认15mm
+            zero_position_idx: 零位置索引
+            
+        Returns:
+            包含左右轮Caster Angle的字典
+        """
+        logger.debug("计算Bump Caster")
+        
+        # 提取数据
+        wheel_travel_left, wheel_travel_right = self.extractor.extract_wheel_travel_left_right(convert_length=True)
+        caster_left = self.extractor.extract_by_name('caster_angle', convert_angle=True)
+        caster_right = self.extractor.extract_by_name('caster_angle', convert_angle=True)
+        
+        if caster_left.ndim > 1:
+            caster_left = caster_left[:, 0]
+        if caster_right.ndim > 1:
+            caster_right = caster_right[:, 1] if caster_right.shape[1] > 1 else caster_right[:, 0]
+        
+        # 转换单位
+        wheel_travel_left_mm = wheel_travel_left * 1000
+        wheel_travel_right_mm = wheel_travel_right * 1000
+        
+        # 查找零位置
+        if zero_position_idx is None:
+            zero_idx_left = find_zero_crossing(wheel_travel_left_mm, wheel_travel_left_mm)
+            zero_idx_right = find_zero_crossing(wheel_travel_right_mm, wheel_travel_right_mm)
+            zero_idx = (zero_idx_left + zero_idx_right) // 2 if zero_idx_left and zero_idx_right else len(wheel_travel_left) // 2
+        else:
+            zero_idx = zero_position_idx
+        
+        # 确定拟合区间
+        fit_start = max(0, zero_idx - fit_range)
+        fit_end = min(len(wheel_travel_left), zero_idx + fit_range + 1)
+        
+        # 左轮拟合
+        x_left = wheel_travel_left_mm[fit_start:fit_end]
+        y_left = caster_left[fit_start:fit_end]
+        coeffs_left, _ = linear_fit(x_left, y_left, degree=1)
+        
+        # 右轮拟合
+        x_right = wheel_travel_right_mm[fit_start:fit_end]
+        y_right = caster_right[fit_start:fit_end]
+        coeffs_right, _ = linear_fit(x_right, y_right, degree=1)
+        
+        # Caster Angle在零位置的值（deg）
+        caster_at_zero_left = coeffs_left[1]  # 截距
+        caster_at_zero_right = coeffs_right[1]
+        caster_at_zero_avg = (caster_at_zero_left + caster_at_zero_right) / 2
+        
+        logger.debug(f"Bump Caster@WC: 左={caster_at_zero_left:.2f}, 右={caster_at_zero_right:.2f}, 平均={caster_at_zero_avg:.2f} deg")
+        
+        return {
+            'left_at_zero': caster_at_zero_left,
+            'right_at_zero': caster_at_zero_right,
+            'average_at_zero': caster_at_zero_avg,
+            'left_coeffs': coeffs_left.tolist(),
+            'right_coeffs': coeffs_right.tolist(),
+            'zero_position_idx': zero_idx,
+            'fit_range': fit_range
+        }
+    
+    def calculate_bump_side_swing_arm_angle(self,
+                                           fit_range: int = 15,
+                                           zero_position_idx: Optional[int] = None) -> Dict[str, float]:
+        """计算Bump Side Swing Arm Angle（轮跳侧视摆臂角）
+        
+        Args:
+            fit_range: 拟合区间范围（mm），默认15mm
+            zero_position_idx: 零位置索引
+            
+        Returns:
+            包含左右轮Side Swing Arm Angle的字典
+        """
+        logger.debug("计算Bump Side Swing Arm Angle")
+        
+        # 提取数据
+        wheel_travel_left, wheel_travel_right = self.extractor.extract_wheel_travel_left_right(convert_length=True)
+        swa_angle_left = self.extractor.extract_by_name('side_view_swing_arm_angle', convert_angle=True)
+        swa_angle_right = self.extractor.extract_by_name('side_view_swing_arm_angle', convert_angle=True)
+        
+        if swa_angle_left.ndim > 1:
+            swa_angle_left = swa_angle_left[:, 0]
+        if swa_angle_right.ndim > 1:
+            swa_angle_right = swa_angle_right[:, 1] if swa_angle_right.shape[1] > 1 else swa_angle_right[:, 0]
+        
+        # 转换单位
+        wheel_travel_left_mm = wheel_travel_left * 1000
+        wheel_travel_right_mm = wheel_travel_right * 1000
+        
+        # 查找零位置
+        if zero_position_idx is None:
+            zero_idx_left = find_zero_crossing(wheel_travel_left_mm, wheel_travel_left_mm)
+            zero_idx_right = find_zero_crossing(wheel_travel_right_mm, wheel_travel_right_mm)
+            zero_idx = (zero_idx_left + zero_idx_right) // 2 if zero_idx_left and zero_idx_right else len(wheel_travel_left) // 2
+        else:
+            zero_idx = zero_position_idx
+        
+        # 确定拟合区间
+        fit_start = max(0, zero_idx - fit_range)
+        fit_end = min(len(wheel_travel_left), zero_idx + fit_range + 1)
+        
+        # 左轮拟合
+        x_left = wheel_travel_left_mm[fit_start:fit_end]
+        y_left = swa_angle_left[fit_start:fit_end]
+        coeffs_left, _ = linear_fit(x_left, y_left, degree=1)
+        
+        # 右轮拟合
+        x_right = wheel_travel_right_mm[fit_start:fit_end]
+        y_right = swa_angle_right[fit_start:fit_end]
+        coeffs_right, _ = linear_fit(x_right, y_right, degree=1)
+        
+        # Side Swing Arm Angle在零位置的值（deg）
+        swa_at_zero_left = coeffs_left[1]  # 截距
+        swa_at_zero_right = coeffs_right[1]
+        swa_at_zero_avg = (swa_at_zero_left + swa_at_zero_right) / 2
+        
+        logger.debug(f"Bump Side Swing Arm Angle@WC: 左={swa_at_zero_left:.3f}, 右={swa_at_zero_right:.3f}, 平均={swa_at_zero_avg:.3f} deg")
+        
+        return {
+            'left_at_zero': swa_at_zero_left,
+            'right_at_zero': swa_at_zero_right,
+            'average_at_zero': swa_at_zero_avg,
+            'left_coeffs': coeffs_left.tolist(),
+            'right_coeffs': coeffs_right.tolist(),
+            'zero_position_idx': zero_idx,
+            'fit_range': fit_range
+        }
+    
+    def calculate_bump_side_swing_arm_length(self,
+                                           fit_range: int = 15,
+                                           zero_position_idx: Optional[int] = None) -> Dict[str, float]:
+        """计算Bump Side Swing Arm Length（轮跳侧视摆臂长度）
+        
+        Args:
+            fit_range: 拟合区间范围（mm），默认15mm
+            zero_position_idx: 零位置索引
+            
+        Returns:
+            包含左右轮Side Swing Arm Length的字典
+        """
+        logger.debug("计算Bump Side Swing Arm Length")
+        
+        # 提取数据
+        wheel_travel_left, wheel_travel_right = self.extractor.extract_wheel_travel_left_right(convert_length=True)
+        swa_length_left = self.extractor.extract_by_name('side_view_swing_arm_length', convert_length=True)
+        swa_length_right = self.extractor.extract_by_name('side_view_swing_arm_length', convert_length=True)
+        
+        if swa_length_left.ndim > 1:
+            swa_length_left = swa_length_left[:, 0]
+        if swa_length_right.ndim > 1:
+            swa_length_right = swa_length_right[:, 1] if swa_length_right.shape[1] > 1 else swa_length_right[:, 0]
+        
+        # 转换单位
+        wheel_travel_left_mm = wheel_travel_left * 1000
+        wheel_travel_right_mm = wheel_travel_right * 1000
+        swa_length_left_mm = swa_length_left * 1000
+        swa_length_right_mm = swa_length_right * 1000
+        
+        # 查找零位置
+        if zero_position_idx is None:
+            zero_idx_left = find_zero_crossing(wheel_travel_left_mm, wheel_travel_left_mm)
+            zero_idx_right = find_zero_crossing(wheel_travel_right_mm, wheel_travel_right_mm)
+            zero_idx = (zero_idx_left + zero_idx_right) // 2 if zero_idx_left and zero_idx_right else len(wheel_travel_left) // 2
+        else:
+            zero_idx = zero_position_idx
+        
+        # 确定拟合区间
+        fit_start = max(0, zero_idx - fit_range)
+        fit_end = min(len(wheel_travel_left), zero_idx + fit_range + 1)
+        
+        # 左轮拟合
+        x_left = wheel_travel_left_mm[fit_start:fit_end]
+        y_left = swa_length_left_mm[fit_start:fit_end]
+        coeffs_left, _ = linear_fit(x_left, y_left, degree=1)
+        
+        # 右轮拟合
+        x_right = wheel_travel_right_mm[fit_start:fit_end]
+        y_right = swa_length_right_mm[fit_start:fit_end]
+        coeffs_right, _ = linear_fit(x_right, y_right, degree=1)
+        
+        # Side Swing Arm Length在零位置的值（mm）
+        swa_length_at_zero_left = coeffs_left[1]  # 截距
+        swa_length_at_zero_right = coeffs_right[1]
+        swa_length_at_zero_avg = (swa_length_at_zero_left + swa_length_at_zero_right) / 2
+        
+        logger.debug(f"Bump Side Swing Arm Length@WC: 左={swa_length_at_zero_left:.3f}, 右={swa_length_at_zero_right:.3f}, 平均={swa_length_at_zero_avg:.3f} mm")
+        
+        return {
+            'left_at_zero': swa_length_at_zero_left,
+            'right_at_zero': swa_length_at_zero_right,
+            'average_at_zero': swa_length_at_zero_avg,
+            'left_coeffs': coeffs_left.tolist(),
+            'right_coeffs': coeffs_right.tolist(),
+            'zero_position_idx': zero_idx,
+            'fit_range': fit_range
+        }
+    
+    def calculate_bump_wheel_load(self,
+                                 fit_range: int = 15,
+                                 zero_position_idx: Optional[int] = None) -> Dict[str, float]:
+        """计算Bump Wheel Load（轮跳载荷）
+        
+        Args:
+            fit_range: 拟合区间范围（mm），默认15mm
+            zero_position_idx: 零位置索引
+            
+        Returns:
+            包含左右轮Wheel Rate（载荷斜率）的字典
+        """
+        logger.debug("计算Bump Wheel Load")
+        
+        # 提取数据
+        wheel_travel_left, wheel_travel_right = self.extractor.extract_wheel_travel_left_right(convert_length=True)
+        wheel_load_left = self.extractor.extract_by_name('wheel_load_vertical_force')
+        wheel_load_right = self.extractor.extract_by_name('wheel_load_vertical_force')
+        
+        if wheel_load_left.ndim > 1:
+            wheel_load_left = wheel_load_left[:, 0]
+        if wheel_load_right.ndim > 1:
+            wheel_load_right = wheel_load_right[:, 1] if wheel_load_right.shape[1] > 1 else wheel_load_right[:, 0]
+        
+        # 转换单位
+        wheel_travel_left_mm = wheel_travel_left * 1000
+        wheel_travel_right_mm = wheel_travel_right * 1000
+        
+        # 查找零位置
+        if zero_position_idx is None:
+            zero_idx_left = find_zero_crossing(wheel_travel_left_mm, wheel_travel_left_mm)
+            zero_idx_right = find_zero_crossing(wheel_travel_right_mm, wheel_travel_right_mm)
+            zero_idx = (zero_idx_left + zero_idx_right) // 2 if zero_idx_left and zero_idx_right else len(wheel_travel_left) // 2
+        else:
+            zero_idx = zero_position_idx
+        
+        # 确定拟合区间
+        fit_start = max(0, zero_idx - fit_range)
+        fit_end = min(len(wheel_travel_left), zero_idx + fit_range + 1)
+        
+        # 左轮拟合
+        x_left = wheel_travel_left_mm[fit_start:fit_end]
+        y_left = wheel_load_left[fit_start:fit_end]
+        coeffs_left, _ = linear_fit(x_left, y_left, degree=1)
+        
+        # 右轮拟合
+        x_right = wheel_travel_right_mm[fit_start:fit_end]
+        y_right = wheel_load_right[fit_start:fit_end]
+        coeffs_right, _ = linear_fit(x_right, y_right, degree=1)
+        
+        # Wheel Rate（N/mm）- 载荷对轮跳的斜率
+        rate_left = coeffs_left[0]  # N/mm
+        rate_right = coeffs_right[0]
+        rate_avg = (rate_left + rate_right) / 2
+        
+        logger.debug(f"Bump Wheel Rate: 左={rate_left:.2f}, 右={rate_right:.2f}, 平均={rate_avg:.2f} N/mm")
+        
+        return {
+            'left_rate': rate_left,
+            'right_rate': rate_right,
+            'average_rate': rate_avg,
+            'left_coeffs': coeffs_left.tolist(),
+            'right_coeffs': coeffs_right.tolist(),
+            'zero_position_idx': zero_idx,
+            'fit_range': fit_range
         }
     
     # ==================== Roll测试计算 ====================
@@ -868,24 +1133,27 @@ class KCCalculator:
         lateral_force_left_kn = lateral_force_left / 1000
         lateral_force_right_kn = lateral_force_right / 1000
         
-        # 查找零位置
+        # 查找零位置（与MATLAB一致：min(abs(force))）
         zero_idx = find_zero_crossing(lateral_force_left_kn, lateral_force_left_kn)
         if zero_idx is None:
             zero_idx = len(lateral_force_left_kn) // 2
         
-        # 确定拟合区间
-        fit_range_idx = int(fit_range * 10)  # 假设每kN对应10个数据点
-        fit_start = max(0, zero_idx - fit_range_idx)
-        fit_end = min(len(lateral_force_left_kn), zero_idx + fit_range_idx + 1)
+        # 确定拟合区间（与MATLAB一致：按力值查找，非按索引）
+        fit_start, fit_end = _find_fit_range_indices_by_value(lateral_force_left_kn, fit_range)
+        fit_start = max(0, fit_start)
+        fit_end = min(len(lateral_force_left_kn), fit_end)
+        fit_start_r, fit_end_r = _find_fit_range_indices_by_value(lateral_force_right_kn, fit_range)
+        fit_start_r = max(0, fit_start_r)
+        fit_end_r = min(len(lateral_force_right_kn), fit_end_r)
         
-        # 左轮拟合
+        # 左轮拟合（polyfit与MATLAB完全一致）
         x_left = lateral_force_left_kn[fit_start:fit_end]
         y_left = toe_left[fit_start:fit_end]
         coeffs_left, _ = linear_fit(x_left, y_left, degree=1)
         
         # 右轮拟合
-        x_right = lateral_force_right_kn[fit_start:fit_end]
-        y_right = toe_right[fit_start:fit_end]
+        x_right = lateral_force_right_kn[fit_start_r:fit_end_r]
+        y_right = toe_right[fit_start_r:fit_end_r]
         coeffs_right, _ = linear_fit(x_right, y_right, degree=1)
         
         # Lateral Toe Compliance（deg/kN）
@@ -902,7 +1170,11 @@ class KCCalculator:
             'left_coeffs': coeffs_left.tolist(),
             'right_coeffs': coeffs_right.tolist(),
             'zero_position_idx': zero_idx,
-            'fit_range': fit_range
+            'fit_range': fit_range,
+            'fit_start_left': fit_start,
+            'fit_end_left': fit_end,
+            'fit_start_right': fit_start_r,
+            'fit_end_right': fit_end_r
         }
     
     def calculate_lateral_camber_compliance(self,
@@ -938,24 +1210,27 @@ class KCCalculator:
         lateral_force_left_kn = lateral_force_left / 1000
         lateral_force_right_kn = lateral_force_right / 1000
         
-        # 查找零位置
+        # 查找零位置（与MATLAB一致）
         zero_idx = find_zero_crossing(lateral_force_left_kn, lateral_force_left_kn)
         if zero_idx is None:
             zero_idx = len(lateral_force_left_kn) // 2
         
-        # 确定拟合区间
-        fit_range_idx = int(fit_range * 10)
-        fit_start = max(0, zero_idx - fit_range_idx)
-        fit_end = min(len(lateral_force_left_kn), zero_idx + fit_range_idx + 1)
+        # 确定拟合区间（与MATLAB一致：按力值查找）
+        fit_start, fit_end = _find_fit_range_indices_by_value(lateral_force_left_kn, fit_range)
+        fit_start = max(0, fit_start)
+        fit_end = min(len(lateral_force_left_kn), fit_end)
+        fit_start_r, fit_end_r = _find_fit_range_indices_by_value(lateral_force_right_kn, fit_range)
+        fit_start_r = max(0, fit_start_r)
+        fit_end_r = min(len(lateral_force_right_kn), fit_end_r)
         
-        # 左轮拟合
+        # 左轮拟合（polyfit与MATLAB完全一致）
         x_left = lateral_force_left_kn[fit_start:fit_end]
         y_left = camber_left[fit_start:fit_end]
         coeffs_left, _ = linear_fit(x_left, y_left, degree=1)
         
         # 右轮拟合
-        x_right = lateral_force_right_kn[fit_start:fit_end]
-        y_right = camber_right[fit_start:fit_end]
+        x_right = lateral_force_right_kn[fit_start_r:fit_end_r]
+        y_right = camber_right[fit_start_r:fit_end_r]
         coeffs_right, _ = linear_fit(x_right, y_right, degree=1)
         
         # Lateral Camber Compliance（deg/kN）
@@ -972,7 +1247,11 @@ class KCCalculator:
             'left_coeffs': coeffs_left.tolist(),
             'right_coeffs': coeffs_right.tolist(),
             'zero_position_idx': zero_idx,
-            'fit_range': fit_range
+            'fit_range': fit_range,
+            'fit_start_left': fit_start,
+            'fit_end_left': fit_end,
+            'fit_start_right': fit_start_r,
+            'fit_end_right': fit_end_r
         }
     
     # ==================== Static Load Braking计算 ====================
@@ -1011,24 +1290,27 @@ class KCCalculator:
         braking_force_left_kn = braking_force_left / 1000
         braking_force_right_kn = braking_force_right / 1000
         
-        # 查找零位置
+        # 查找零位置（与MATLAB一致）
         zero_idx = find_zero_crossing(braking_force_left_kn, braking_force_left_kn)
         if zero_idx is None:
             zero_idx = len(braking_force_left_kn) // 2
         
-        # 确定拟合区间
-        fit_range_idx = int(fit_range * 10)
-        fit_start = max(0, zero_idx - fit_range_idx)
-        fit_end = min(len(braking_force_left_kn), zero_idx + fit_range_idx + 1)
+        # 确定拟合区间（与MATLAB一致：按力值查找）
+        fit_start, fit_end = _find_fit_range_indices_by_value(braking_force_left_kn, fit_range)
+        fit_start = max(0, fit_start)
+        fit_end = min(len(braking_force_left_kn), fit_end)
+        fit_start_r, fit_end_r = _find_fit_range_indices_by_value(braking_force_right_kn, fit_range)
+        fit_start_r = max(0, fit_start_r)
+        fit_end_r = min(len(braking_force_right_kn), fit_end_r)
         
-        # 左轮拟合
+        # 左轮拟合（polyfit与MATLAB完全一致）
         x_left = braking_force_left_kn[fit_start:fit_end]
         y_left = toe_left[fit_start:fit_end]
         coeffs_left, _ = linear_fit(x_left, y_left, degree=1)
         
         # 右轮拟合
-        x_right = braking_force_right_kn[fit_start:fit_end]
-        y_right = toe_right[fit_start:fit_end]
+        x_right = braking_force_right_kn[fit_start_r:fit_end_r]
+        y_right = toe_right[fit_start_r:fit_end_r]
         coeffs_right, _ = linear_fit(x_right, y_right, degree=1)
         
         # Braking Toe Compliance（deg/kN）
@@ -1045,7 +1327,11 @@ class KCCalculator:
             'left_coeffs': coeffs_left.tolist(),
             'right_coeffs': coeffs_right.tolist(),
             'zero_position_idx': zero_idx,
-            'fit_range': fit_range
+            'fit_range': fit_range,
+            'fit_start_left': fit_start,
+            'fit_end_left': fit_end,
+            'fit_start_right': fit_start_r,
+            'fit_end_right': fit_end_r
         }
     
     def calculate_anti_dive(self) -> Dict[str, float]:
@@ -1118,24 +1404,27 @@ class KCCalculator:
         acceleration_force_left_kn = acceleration_force_left / 1000
         acceleration_force_right_kn = acceleration_force_right / 1000
         
-        # 查找零位置
+        # 查找零位置（与MATLAB一致）
         zero_idx = find_zero_crossing(acceleration_force_left_kn, acceleration_force_left_kn)
         if zero_idx is None:
             zero_idx = len(acceleration_force_left_kn) // 2
         
-        # 确定拟合区间
-        fit_range_idx = int(fit_range * 10)
-        fit_start = max(0, zero_idx - fit_range_idx)
-        fit_end = min(len(acceleration_force_left_kn), zero_idx + fit_range_idx + 1)
+        # 确定拟合区间（与MATLAB一致：按力值查找）
+        fit_start, fit_end = _find_fit_range_indices_by_value(acceleration_force_left_kn, fit_range)
+        fit_start = max(0, fit_start)
+        fit_end = min(len(acceleration_force_left_kn), fit_end)
+        fit_start_r, fit_end_r = _find_fit_range_indices_by_value(acceleration_force_right_kn, fit_range)
+        fit_start_r = max(0, fit_start_r)
+        fit_end_r = min(len(acceleration_force_right_kn), fit_end_r)
         
-        # 左轮拟合
+        # 左轮拟合（polyfit与MATLAB完全一致）
         x_left = acceleration_force_left_kn[fit_start:fit_end]
         y_left = toe_left[fit_start:fit_end]
         coeffs_left, _ = linear_fit(x_left, y_left, degree=1)
         
         # 右轮拟合
-        x_right = acceleration_force_right_kn[fit_start:fit_end]
-        y_right = toe_right[fit_start:fit_end]
+        x_right = acceleration_force_right_kn[fit_start_r:fit_end_r]
+        y_right = toe_right[fit_start_r:fit_end_r]
         coeffs_right, _ = linear_fit(x_right, y_right, degree=1)
         
         # Acceleration Toe Compliance（deg/kN）
@@ -1152,7 +1441,11 @@ class KCCalculator:
             'left_coeffs': coeffs_left.tolist(),
             'right_coeffs': coeffs_right.tolist(),
             'zero_position_idx': zero_idx,
-            'fit_range': fit_range
+            'fit_range': fit_range,
+            'fit_start_left': fit_start,
+            'fit_end_left': fit_end,
+            'fit_start_right': fit_start_r,
+            'fit_end_right': fit_end_r
         }
     
     def calculate_anti_squat(self) -> Dict[str, float]:

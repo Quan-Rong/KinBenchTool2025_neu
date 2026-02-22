@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2025-02-15
+
+### Added
+- START/INFO 标签页改进
+  - 左右分栏布局（左侧显示 README，右侧显示作者信息）
+  - 左侧：显示项目 README.md 内容（支持 Markdown 渲染）
+  - 右侧上方：显示猴子图片（带圆角和边框样式）
+  - 右侧下方：显示作者信息卡片（Quan Rong, quan.rong@de.gestamp.com）
+  - 改进的 Markdown 转 HTML 转换函数（更好的代码块和列表处理）
+
+### Changed
+- 优化 START/INFO 标签页的用户体验
+- 改进版本号显示机制（统一从 __version__ 或 VERSION 文件读取）
+
 ## [0.1.1] - 2025-01-27
 
 ### Added
