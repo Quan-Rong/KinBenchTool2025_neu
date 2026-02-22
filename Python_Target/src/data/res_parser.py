@@ -28,8 +28,8 @@ class ResParser:
     # 正则表达式：匹配数字ID
     ID_PATTERN = re.compile(r'\d+')
     
-    # quasiStatic数据段标识
-    QUASISTATIC_MARKER = '"quasiStatic"'
+    # quasiStatic数据段标识（支持多种格式）
+    QUASISTATIC_MARKERS = ['"quasiStatic"', 'quasiStatic', '<Step type="quasiStatic">']
     
     def __init__(self, file_path: str):
         """初始化解析器
@@ -170,8 +170,9 @@ class ResParser:
         warning_issued = False  # 标记是否已发出警告，避免重复输出
         
         for line in file_gen:
-            # 检查是否是quasiStatic标记（支持两种格式）
-            if self.QUASISTATIC_MARKER in line or '<Step type="quasiStatic">' in line:
+            # 检查是否是quasiStatic标记（支持多种格式）
+            is_quasistatic = any(marker in line for marker in self.QUASISTATIC_MARKERS)
+            if is_quasistatic:
                 # 找到quasiStatic标记，开始读取数据
                 test_data = []
                 

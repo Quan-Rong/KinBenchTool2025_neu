@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-02-22
+
+### Fixed
+- 修复quasiStatic数据段解析问题，支持多种格式（带引号、不带引号、XML格式）
+- 修复plot_validator中形状不匹配时缺少'shape_mismatch'键的问题
+- 修复测试中Mock对象解包错误，为extract_wheel_travel_left_right添加正确的返回值
+
 ## [0.3.1] - 2026-02-22
 
 ### Fixed

@@ -34,6 +34,7 @@ def compare_plot_data(
     if matlab_data.shape != python_data.shape:
         return False, {
             "error": "数据形状不匹配",
+            "shape_mismatch": True,
             "matlab_shape": matlab_data.shape,
             "python_shape": python_data.shape,
         }
