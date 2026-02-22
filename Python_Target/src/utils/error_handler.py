@@ -3,8 +3,18 @@
 提供统一的错误处理和用户友好的错误消息。
 """
 
-from typing import Optional, Dict, Any
-from PyQt6.QtWidgets import QMessageBox, QWidget
+from typing import Optional, Dict, Any, TYPE_CHECKING
+
+# 尝试导入 PyQt6，如果失败则设为 None（用于无头环境）
+try:
+    from PyQt6.QtWidgets import QMessageBox, QWidget
+    HAS_PYQT6 = True
+except ImportError:
+    # 在无头环境（如 CI）中，PyQt6 可能不可用
+    HAS_PYQT6 = False
+    if TYPE_CHECKING:
+        from PyQt6.QtWidgets import QMessageBox, QWidget
+
 from ..utils.logger import get_logger
 from ..utils.exceptions import (KnCToolError, FileError, DataValidationError, 
                                 CalculationError, PlotGenerationError)
@@ -83,7 +93,7 @@ class ErrorHandler:
             return f"{title}\n\n建议: {suggestion}"
     
     @staticmethod
-    def show_error(parent: Optional[QWidget], error: Exception, 
+    def show_error(parent: Optional['QWidget'], error: Exception, 
                   error_type: Optional[str] = None, 
                   language: str = 'zh') -> None:
         """显示错误对话框
@@ -122,11 +132,14 @@ class ErrorHandler:
         # 记录日志
         logger.error(f"显示错误对话框: {error_type}, {error}", exc_info=True)
         
-        # 显示对话框
-        QMessageBox.critical(parent, "Error", message)
+        # 显示对话框（如果 PyQt6 可用）
+        if HAS_PYQT6:
+            QMessageBox.critical(parent, "Error", message)
+        else:
+            logger.warning(f"无法显示错误对话框（无 GUI 环境）: {message}")
     
     @staticmethod
-    def show_warning(parent: Optional[QWidget], title: str, message: str,
+    def show_warning(parent: Optional['QWidget'], title: str, message: str,
                     language: str = 'zh') -> None:
         """显示警告对话框
         
@@ -137,10 +150,13 @@ class ErrorHandler:
             language: 语言 ('zh' 或 'en')
         """
         logger.warning(f"显示警告: {title}, {message}")
-        QMessageBox.warning(parent, title, message)
+        if HAS_PYQT6:
+            QMessageBox.warning(parent, title, message)
+        else:
+            logger.warning(f"无法显示警告对话框（无 GUI 环境）: {title} - {message}")
     
     @staticmethod
-    def show_info(parent: Optional[QWidget], title: str, message: str) -> None:
+    def show_info(parent: Optional['QWidget'], title: str, message: str) -> None:
         """显示信息对话框
         
         Args:
@@ -149,10 +165,13 @@ class ErrorHandler:
             message: 消息内容
         """
         logger.info(f"显示信息: {title}, {message}")
-        QMessageBox.information(parent, title, message)
+        if HAS_PYQT6:
+            QMessageBox.information(parent, title, message)
+        else:
+            logger.info(f"无法显示信息对话框（无 GUI 环境）: {title} - {message}")
     
     @staticmethod
-    def handle_exception(parent: Optional[QWidget], exception: Exception,
+    def handle_exception(parent: Optional['QWidget'], exception: Exception,
                         context: str = "", language: str = 'zh') -> None:
         """统一异常处理
         

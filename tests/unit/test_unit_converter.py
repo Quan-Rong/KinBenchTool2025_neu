@@ -158,4 +158,4 @@ class TestConvertLengthArray:
         """测试无效的单位转换。"""
         data = np.array([0, 500, 1000])
         with pytest.raises(ValueError, match="不支持的单位转换"):
-            convert_length_array(data, from_unit='mm', to_unit='deg")
+            convert_length_array(data, from_unit='mm', to_unit='deg')
