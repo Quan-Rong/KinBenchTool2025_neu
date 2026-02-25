@@ -456,10 +456,10 @@ class ComparisonPlotWidget(QWidget):
         super().__init__(parent)
         setup_matplotlib_style()
         
-        # 左右各一个figure和canvas
-        half_width = figsize[0] // 2
-        self.figure_left = Figure(figsize=(half_width, figsize[1]), dpi=dpi)
-        self.figure_right = Figure(figsize=(half_width, figsize[1]), dpi=dpi)
+        # 左右各一个figure和canvas（保持原有figsize逻辑，不在这里强行调成正方形）
+        half_width = max(1.0, float(figsize[0]) / 2.0)
+        self.figure_left = Figure(figsize=(half_width, float(figsize[1])), dpi=dpi)
+        self.figure_right = Figure(figsize=(half_width, float(figsize[1])), dpi=dpi)
         self.canvas_left = FigureCanvas(self.figure_left)
         self.canvas_right = FigureCanvas(self.figure_right)
         

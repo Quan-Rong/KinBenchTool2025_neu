@@ -136,14 +136,19 @@ def plot_fit_line(ax: Axes,
         markevery: 标记间隔 (start, end)，用于标记拟合区间的起点和终点
         linestyle: 线形（默认实线）
     """
+    # 规范化拟合区间，避免顺序颠倒导致无数据
+    fit_min, fit_max = sorted(fit_range)
+
     # 筛选拟合区间内的数据
-    mask = (x >= fit_range[0]) & (x <= fit_range[1])
+    mask = (x >= fit_min) & (x <= fit_max)
     x_fit = x[mask]
     y_fit_filtered = y_fit[mask]
     
     if len(x_fit) == 0:
-        logger.warning(f"拟合区间内无数据点: {fit_range}")
-        return
+        # 如果区间过滤后没有数据，则回退为使用全部数据，避免拟合线完全不显示
+        logger.warning(f"拟合区间内无数据点: {fit_range}，回退为使用全部数据绘制拟合线")
+        x_fit = x
+        y_fit_filtered = y_fit
     
     # 生成标签
     if label is None:
@@ -158,11 +163,11 @@ def plot_fit_line(ax: Axes,
         'label': label,
         'color': color,
         'marker': marker,
-        'markersize': marker_size,
+        'markersize': marker_size - 4,  # 降低两级（从12降到8）
         'markerfacecolor': 'none',  # 空心标记
         'markeredgecolor': color,
-        'markeredgewidth': 1.5,
-        'linewidth': DEFAULT_LINE_WIDTH + 0.5,  # 稍微加粗拟合线使其更明显
+        'markeredgewidth': 1.0,  # 相应减小边缘宽度
+        'linewidth': DEFAULT_LINE_WIDTH - 0.5,  # 降低两级（从3.0降到2.0）
         'linestyle': linestyle,
         'zorder': 10  # 确保拟合线显示在数据曲线之上
     }
@@ -473,3 +478,29 @@ def convert_matlab_color_to_python(color: Any) -> str:
         # 默认返回黑色
         logger.warning(f"无法识别的颜色格式: {color}, 使用默认黑色")
         return '#000000'
+
+
+def get_compare_style(compare_count: int) -> Dict[str, Any]:
+    """获取对比结果的样式
+    
+    对比结果的曲线使用灰色，拟合线使用蓝色，线型循环变化
+    
+    Args:
+        compare_count: 对比数量（从1开始）
+        
+    Returns:
+        包含curve_color, fit_color, curve_linestyle, fit_linestyle的字典
+    """
+    # 定义线型循环：实线、虚线、点划线、点线
+    linestyles = ['-', '--', '-.', ':']
+    
+    # 计算线型索引（从0开始）
+    linestyle_idx = (compare_count - 1) % len(linestyles)
+    linestyle = linestyles[linestyle_idx]
+    
+    return {
+        'curve_color': '#ff7f0e',  # 橙色（用于所有“添加的数据”曲线）
+        'fit_color': '#0000ff',    # 蓝色（拟合线保持蓝色，便于区分）
+        'curve_linestyle': linestyle,
+        'fit_linestyle': linestyle,
+    }

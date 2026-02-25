@@ -3,12 +3,15 @@
 提供各种K&C测试工况的计算函数，包括Bump、Roll、Static Load等。
 """
 
-from typing import Dict, Tuple, Optional, List
+from typing import Dict, Tuple, Optional, List, Any
 import numpy as np
 
 from .data_extractor import DataExtractor
 from .unit_converter import convert_angle_array, convert_length_array
 from ..utils.math_utils import linear_fit, find_zero_crossing, find_value_index, calculate_slope
+from ..utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def _find_fit_range_indices_by_value(force_arr: np.ndarray, fit_range: float) -> Tuple[int, int]:
@@ -71,6 +74,374 @@ class KCCalculator:
         """
         return self.vehicle_params.get(key, default)
     
+    # ==================== 与 MATLAB 完全一致的数据构造助手 ====================
+
+    def _build_parallel_travel_matrices(self) -> Dict[str, Any]:
+        """构造与 MATLAB `KinBenchTool_Bump_Plot.m` 中
+        `Susp_parallel_travel_data1` 和 `Susp_parallel_travel_plot_data1`
+        完全一致的数据矩阵。
+
+        - 列顺序严格按照 MATLAB 的 ID 列表
+        - 单位转换（rad->deg、mm/deg 等）与 MATLAB 完全一致
+        - Row_No / Row_No1 / Row_No2g 的计算公式与 MATLAB 完全一致
+
+        Returns:
+            {
+                'data1': Susp_parallel_travel_data1 (np.ndarray),
+                'plot_data1': Susp_parallel_travel_plot_data1 (np.ndarray),
+                'Row_No': int,
+                'Row_No1': int,
+                'Row_No2g': int,
+            }
+        """
+        # 通过 DataExtractor 访问底层 ResParser 和 quasiStatic_data
+        parser = self.extractor.parser  # type: ignore[attr-defined]
+        quasi = parser.quasi_static_data
+        if quasi is None:
+            raise ValueError("quasiStatic 数据不存在，请先解析 .res 文件")
+
+        # ==== 1) 按 MATLAB 的 ID 顺序构造 Susp_parallel_travel_ID ====
+        # 使用 try-except 处理缺失的参数，对于缺失的参数使用 None 作为标记
+        def safe_get_param_id(param_name: str) -> Optional[Any]:
+            """安全获取参数ID，如果不存在则返回 None 并记录警告"""
+            try:
+                return parser.get_param_id(param_name)
+            except ValueError:
+                logger.warning(f"参数 {param_name} 未找到，将使用全零占位符")
+                return None
+        
+        toe_angle_ID = parser.get_param_id('toe_angle')
+        camber_angle_ID = parser.get_param_id('camber_angle')
+        caster_angle_ID = parser.get_param_id('caster_angle')
+        kingpin_incl_angle_ID = parser.get_param_id('kingpin_incl_angle')
+        caster_moment_arm_ID = parser.get_param_id('caster_moment_arm')
+        scrub_radius_ID = parser.get_param_id('scrub_radius')
+        left_tire_contact_point_ID = parser.get_param_id('left_tire_contact_point')
+        wheel_travel_base_ID = parser.get_param_id('wheel_travel_base')
+        wheel_travel_track_ID = parser.get_param_id('wheel_travel_track')
+        total_track_ID = parser.get_param_id('total_track')
+        roll_steer_ID = safe_get_param_id('roll_steer')  # 可能为 None
+        roll_camber_coefficient_ID = parser.get_param_id('roll_camber_coefficient')
+        roll_center_location_ID = parser.get_param_id('roll_center_location')
+        anti_dive_ID = parser.get_param_id('anti_dive')
+        anti_lift_ID = parser.get_param_id('anti_lift')
+        susp_roll_rate_ID = parser.get_param_id('susp_roll_rate')
+        total_roll_rate_ID = parser.get_param_id('total_roll_rate')
+        wheel_rate_ID = parser.get_param_id('wheel_rate')
+        ride_rate_ID = parser.get_param_id('ride_rate')
+        left_tire_forces_ID = parser.get_param_id('left_tire_forces')
+        wheel_travel_ID = parser.get_param_id('wheel_travel')
+        wheel_load_vertical_force_ID = parser.get_param_id('wheel_load_vertical_force')
+        side_view_swing_arm_angle_ID = parser.get_param_id('side_view_swing_arm_angle')
+        side_view_swing_arm_length_ID = parser.get_param_id('side_view_swing_arm_length')
+        right_tire_contact_point_ID = parser.get_param_id('right_tire_contact_point')
+
+        # MATLAB: Susp_parallel_travel_ID = [...]
+        # 构建 ID 列表，对于 None（缺失参数）使用全零列
+        n_rows = quasi.shape[0]
+        
+        def get_id_value(param_id: Any, index: int = 0) -> Optional[int]:
+            """获取参数ID值，如果是None则返回None（后续用全零列替换）"""
+            if param_id is None:
+                return None
+            if isinstance(param_id, list):
+                return param_id[index] if index < len(param_id) else param_id[0]
+            return param_id
+        
+        susp_parallel_travel_ID: List[Optional[int]] = [
+            toe_angle_ID[0],
+            camber_angle_ID[0],
+            caster_angle_ID[0],
+            kingpin_incl_angle_ID[0],
+            caster_moment_arm_ID[0],
+            scrub_radius_ID[0],
+            left_tire_contact_point_ID[0],
+            left_tire_contact_point_ID[1],
+            wheel_travel_base_ID[0],
+            wheel_travel_track_ID[0],
+            total_track_ID,
+            get_id_value(roll_steer_ID, 0),  # 可能为 None
+            roll_camber_coefficient_ID[0],
+            roll_center_location_ID[1],  # vertical
+            anti_dive_ID[0],
+            anti_lift_ID[0],
+            susp_roll_rate_ID,
+            total_roll_rate_ID,
+            wheel_rate_ID[0],
+            ride_rate_ID[0],
+            left_tire_forces_ID[2],      # z 分量
+            wheel_travel_ID[0],
+        ]
+
+        # 构建矩阵，对于 None 占位符使用全零列
+        data1_cols = []
+        param_names = ['toe', 'camber', 'caster', 'kingpin', 'caster_moment_arm', 'scrub_radius',
+                      'left_tire_contact_X', 'left_tire_contact_Y', 'wheel_travel_base',
+                      'wheel_travel_track', 'total_track', 'roll_steer', 'roll_camber_coefficient',
+                      'roll_center_vertical', 'anti_dive', 'anti_lift', 'susp_roll_rate',
+                      'total_roll_rate', 'wheel_rate', 'ride_rate', 'left_tire_forces_Z', 'wheel_travel']
+        for col_idx, (param_id, param_name) in enumerate(zip(susp_parallel_travel_ID, param_names)):
+            if param_id is None:
+                # 使用全零列作为占位符
+                data1_cols.append(np.zeros(n_rows))
+                logger.debug(f"列 {col_idx} ({param_name}) 使用全零占位符")
+            else:
+                # 将1-based的ID转换为0-based的索引
+                data1_cols.append(quasi[:, param_id - 1])
+        data1 = np.column_stack(data1_cols)
+
+        # MATLAB: Susp_parallel_travel_data1(:,1:4) = ... *180/pi
+        data1[:, 0:4] = convert_angle_array(data1[:, 0:4], from_unit='rad', to_unit='deg')
+
+        # MATLAB: data1(:,end-5:end-4) = data1(:,end-5:end-4) * pi/180/1000
+        # end-5: susp_roll_rate, end-4: total_roll_rate
+        idx_susp_roll = data1.shape[1] - 5
+        idx_total_roll = data1.shape[1] - 4
+        data1[:, [idx_susp_roll, idx_total_roll]] = (
+            data1[:, [idx_susp_roll, idx_total_roll]] * (np.pi / 180.0 / 1000.0)
+        )
+
+        # ==== 2) 构造 Susp_parallel_travel_plot_data1 ====
+        # MATLAB: Susp_parallel_travel_plot_ID = [...]
+        susp_parallel_travel_plot_ID: List[int] = [
+            toe_angle_ID[0],
+            toe_angle_ID[1],
+            left_tire_contact_point_ID[1],
+            right_tire_contact_point_ID[1],
+            wheel_travel_base_ID[0],
+            wheel_travel_base_ID[1],
+            wheel_travel_track_ID[0],
+            wheel_travel_track_ID[1],
+            anti_dive_ID[0],
+            anti_dive_ID[1],
+            anti_lift_ID[0],
+            anti_lift_ID[1],
+            wheel_rate_ID[0],
+            wheel_rate_ID[1],
+            camber_angle_ID[0],
+            camber_angle_ID[1],
+            wheel_travel_ID[0],
+            wheel_travel_ID[1],
+            wheel_load_vertical_force_ID[0],
+            wheel_load_vertical_force_ID[1],
+            side_view_swing_arm_angle_ID[0],
+            side_view_swing_arm_angle_ID[1],
+            side_view_swing_arm_length_ID[0],
+            side_view_swing_arm_length_ID[1],
+            caster_angle_ID[0],
+            caster_angle_ID[1],
+        ]
+
+        # 将1-based的ID转换为0-based的索引
+        plot_indices = [pid - 1 for pid in susp_parallel_travel_plot_ID]
+        plot_data1 = quasi[:, plot_indices].copy()
+
+        # MATLAB: toe/camber/svsa/caster 列从弧度转为角度
+        plot_data1[:, 0:2] = convert_angle_array(plot_data1[:, 0:2], from_unit='rad', to_unit='deg')
+        plot_data1[:, 14:16] = convert_angle_array(plot_data1[:, 14:16], from_unit='rad', to_unit='deg')
+        plot_data1[:, 20:22] = convert_angle_array(plot_data1[:, 20:22], from_unit='rad', to_unit='deg')
+        plot_data1[:, 24:26] = convert_angle_array(plot_data1[:, 24:26], from_unit='rad', to_unit='deg')
+
+        # ==== 3) 按 MATLAB 公式计算 Row_No / Row_No1 / Row_No2g ====
+        # data1 最后一列：wheel_travel_ID(1)
+        wheel_travel_col = data1[:, -1]
+
+        # Row_No: 使轮跳绝对值最小的行 -> 整备 0 位置
+        Row_No = int(np.argmin(np.abs(wheel_travel_col)))
+
+        # Row_No1 / Row_No2g: 使用 data1(:, end-1) (left_tire_forces_Z) 与 Wheel_Load 对齐
+        left_wheel_force_z = data1[:, -2]
+
+        max_load = self.get_vehicle_param('max_load', 0.0)
+        Wheel_Load = max_load * 9.8 / 2.0  # 与 MATLAB 完全一致
+
+        Row_No1 = int(np.argmin(np.abs(left_wheel_force_z - Wheel_Load)))
+        Row_No2g = int(np.argmin(np.abs(left_wheel_force_z - Wheel_Load * 2.0)))
+
+        return {
+            'data1': data1,
+            'plot_data1': plot_data1,
+            'Row_No': Row_No,
+            'Row_No1': Row_No1,
+            'Row_No2g': Row_No2g,
+        }
+    
+    def _build_opposite_travel_matrices(self) -> Dict[str, Any]:
+        """构造与 MATLAB `KinBenchTool_Roll_Plot.m` 中
+        `Susp_opposite_travel_data1` 和 `Susp_oppo_travel_plot_data1`
+        完全一致的数据矩阵。
+
+        - 列顺序严格按照 MATLAB 的 ID 列表
+        - 单位转换（rad->deg、mm/deg 等）与 MATLAB 完全一致
+        - Row_No 的计算公式与 MATLAB 完全一致
+
+        Returns:
+            {
+                'data1': Susp_opposite_travel_data1 (np.ndarray),
+                'plot_data1': Susp_oppo_travel_plot_data1 (np.ndarray),
+                'Row_No': int,
+            }
+        """
+        # 通过 DataExtractor 访问底层 ResParser 和 quasiStatic_data
+        parser = self.extractor.parser  # type: ignore[attr-defined]
+        quasi = parser.quasi_static_data
+        if quasi is None:
+            raise ValueError("quasiStatic 数据不存在，请先解析 .res 文件")
+
+        # ==== 1) 按 MATLAB 的 ID 顺序构造 Susp_opposite_travel_ID ====
+        # 使用 try-except 处理缺失的参数，对于缺失的参数使用 None 作为标记
+        def safe_get_param_id(param_name: str) -> Optional[Any]:
+            """安全获取参数ID，如果不存在则返回 None 并记录警告"""
+            try:
+                return parser.get_param_id(param_name)
+            except ValueError:
+                logger.warning(f"参数 {param_name} 未找到，将使用全零占位符")
+                return None
+        
+        toe_angle_ID = parser.get_param_id('toe_angle')
+        camber_angle_ID = parser.get_param_id('camber_angle')
+        roll_steer_ID = safe_get_param_id('roll_steer')  # 可能为 None
+        roll_camber_coefficient_ID = parser.get_param_id('roll_camber_coefficient')
+        susp_roll_rate_ID = parser.get_param_id('susp_roll_rate')
+        total_roll_rate_ID = parser.get_param_id('total_roll_rate')
+        roll_center_location_ID = parser.get_param_id('roll_center_location')
+        wheel_travel_base_ID = parser.get_param_id('wheel_travel_base')
+        wheel_travel_track_ID = parser.get_param_id('wheel_travel_track')
+        left_tire_contact_point_ID = parser.get_param_id('left_tire_contact_point')
+        right_tire_contact_point_ID = parser.get_param_id('right_tire_contact_point')
+        roll_angle_ID = parser.get_param_id('roll_angle')
+        wheel_travel_ID = parser.get_param_id('wheel_travel')
+        left_tire_forces_ID = parser.get_param_id('left_tire_forces')
+        right_tire_forces_ID = parser.get_param_id('right_tire_forces')
+
+        # MATLAB: Susp_opposite_travel_ID = [toe_angle_ID, camber_angle_ID, roll_steer_ID, ...]
+        # 构建 ID 列表，对于 None（缺失参数）使用全零列
+        n_rows = quasi.shape[0]
+        
+        def get_id_value(param_id: Any, index: int = 0) -> Optional[int]:
+            """获取参数ID值，如果是None则返回None（后续用全零列替换）"""
+            if param_id is None:
+                return None
+            if isinstance(param_id, list):
+                return param_id[index] if index < len(param_id) else param_id[0]
+            return param_id
+        
+        # MATLAB: Susp_opposite_travel_ID = [toe_angle_ID, camber_angle_ID, roll_steer_ID, 
+        #         roll_camber_coefficient_ID, susp_roll_rate_ID, total_roll_rate_ID, 
+        #         roll_center_location_ID(2), wheel_travel_base_ID, wheel_travel_track_ID,
+        #         left_tire_contact_point_ID(1), right_tire_contact_point_ID(1),
+        #         left_tire_contact_point_ID(2), right_tire_contact_point_ID(2), roll_angle_ID]
+        susp_opposite_travel_ID: List[Optional[int]] = [
+            toe_angle_ID[0],
+            toe_angle_ID[1],
+            camber_angle_ID[0],
+            camber_angle_ID[1],
+            get_id_value(roll_steer_ID, 0),  # 可能为 None
+            get_id_value(roll_steer_ID, 1) if roll_steer_ID is not None and isinstance(roll_steer_ID, list) and len(roll_steer_ID) > 1 else None,
+            roll_camber_coefficient_ID[0],
+            roll_camber_coefficient_ID[1],
+            susp_roll_rate_ID,
+            total_roll_rate_ID,
+            roll_center_location_ID[1],  # vertical
+            wheel_travel_base_ID[0],
+            wheel_travel_base_ID[1],
+            wheel_travel_track_ID[0],
+            wheel_travel_track_ID[1],
+            left_tire_contact_point_ID[0],
+            right_tire_contact_point_ID[0],
+            left_tire_contact_point_ID[1],
+            right_tire_contact_point_ID[1],
+            roll_angle_ID[0],
+            roll_angle_ID[1],
+        ]
+
+        # 构建矩阵，对于 None 占位符使用全零列
+        data1_cols = []
+        param_names = ['toe_left', 'toe_right', 'camber_left', 'camber_right', 
+                      'roll_steer_left', 'roll_steer_right', 'roll_camber_coeff_left', 'roll_camber_coeff_right',
+                      'susp_roll_rate', 'total_roll_rate', 'roll_center_vertical',
+                      'wheel_travel_base_left', 'wheel_travel_base_right',
+                      'wheel_travel_track_left', 'wheel_travel_track_right',
+                      'left_tire_contact_X', 'right_tire_contact_X',
+                      'left_tire_contact_Y', 'right_tire_contact_Y',
+                      'roll_angle_WC', 'roll_angle_CP']
+        for col_idx, (param_id, param_name) in enumerate(zip(susp_opposite_travel_ID, param_names)):
+            if param_id is None:
+                # 使用全零列作为占位符
+                data1_cols.append(np.zeros(n_rows))
+                logger.debug(f"列 {col_idx} ({param_name}) 使用全零占位符")
+            else:
+                # 将1-based的ID转换为0-based的索引
+                data1_cols.append(quasi[:, param_id - 1])
+        data1 = np.column_stack(data1_cols)
+
+        # MATLAB: Susp_opposite_travel_data1(:,1:4) = ... *180/pi
+        # 列1-4: toe_left, toe_right, camber_left, camber_right
+        data1[:, 0:4] = convert_angle_array(data1[:, 0:4], from_unit='rad', to_unit='deg')
+
+        # MATLAB: data1(:,9:10) = data1(:,9:10) * pi/180/1000
+        # 列9-10: susp_roll_rate, total_roll_rate
+        data1[:, 8:10] = data1[:, 8:10] * (np.pi / 180.0 / 1000.0)
+
+        # MATLAB: data1(:,end-1:end) = data1(:,end-1:end) * 180/pi
+        # 最后两列: roll_angle_WC, roll_angle_CP
+        data1[:, -2:] = convert_angle_array(data1[:, -2:], from_unit='rad', to_unit='deg')
+
+        # ==== 2) 构造 Susp_oppo_travel_plot_data1 ====
+        # MATLAB: Susp_oppo_travel_plot_ID = [toe_angle_ID(1), toe_angle_ID(2), ...]
+        susp_oppo_travel_plot_ID: List[int] = [
+            toe_angle_ID[0],
+            toe_angle_ID[1],
+            camber_angle_ID[0],
+            camber_angle_ID[1],
+            wheel_travel_ID[0],
+            wheel_travel_ID[1],
+            left_tire_forces_ID[2],      # z 分量
+            right_tire_forces_ID[2],     # z 分量
+            roll_center_location_ID[1],  # vertical
+            susp_roll_rate_ID,
+            total_roll_rate_ID,
+            roll_angle_ID[0],            # @WC
+            roll_angle_ID[1],            # @CP
+        ]
+
+        # 将1-based的ID转换为0-based的索引
+        plot_indices = [pid - 1 for pid in susp_oppo_travel_plot_ID]
+        plot_data1 = quasi[:, plot_indices].copy()
+
+        # MATLAB: plot_data1(:,1:4) = ... *180/pi
+        plot_data1[:, 0:4] = convert_angle_array(plot_data1[:, 0:4], from_unit='rad', to_unit='deg')
+
+        # MATLAB: plot_data1(:,10:11) = ... * pi/180/1000
+        plot_data1[:, 9:11] = plot_data1[:, 9:11] * (np.pi / 180.0 / 1000.0)
+
+        # MATLAB: plot_data1(:,12:13) = ... * 180/pi
+        plot_data1[:, 11:13] = convert_angle_array(plot_data1[:, 11:13], from_unit='rad', to_unit='deg')
+
+        # MATLAB: 计算新的两列 camber relative ground
+        # new_col1 = camber_left + roll_angle_CP
+        # new_col2 = camber_right - roll_angle_CP
+        new_col1 = plot_data1[:, 2] + plot_data1[:, 12]  # camber_left + roll_angle_CP
+        new_col2 = plot_data1[:, 3] - plot_data1[:, 12]  # camber_right - roll_angle_CP
+
+        # MATLAB: 计算左右tire force的和
+        new_col3 = plot_data1[:, 6] + plot_data1[:, 7]  # left_tire_force_Z + right_tire_force_Z
+
+        # 将新的列添加到矩阵的末尾
+        plot_data1 = np.column_stack([plot_data1, new_col1, new_col2, new_col3])
+
+        # ==== 3) 按 MATLAB 公式计算 Row_No ====
+        # MATLAB: [Row_Data, Row_No] = min(abs(Susp_opposite_travel_data1(:,end)))
+        # 使用最后一列（roll_angle_CP）查找零位置
+        roll_angle_cp_col = data1[:, -1]
+        Row_No = int(np.argmin(np.abs(roll_angle_cp_col)))
+
+        return {
+            'data1': data1,
+            'plot_data1': plot_data1,
+            'Row_No': Row_No,
+        }
+    
     # ==================== Bump测试计算 ====================
     
     def calculate_bump_steer(self, 
@@ -92,34 +463,24 @@ class KCCalculator:
                 'right_coeffs': [a, b] 右轮拟合系数
             }
         """
-        logger.debug("计算Bump Steer")
-        
-        # 提取数据
-        wheel_travel_left, wheel_travel_right = self.extractor.extract_wheel_travel_left_right(convert_length=True)
-        toe_angle_left = self.extractor.extract_by_name('toe_angle', convert_angle=True)
-        toe_angle_right = self.extractor.extract_by_name('toe_angle', convert_angle=True)
-        
-        # 如果toe_angle是多维的，取第一列（左轮）
-        if toe_angle_left.ndim > 1:
-            toe_angle_left = toe_angle_left[:, 0]
-        if toe_angle_right.ndim > 1:
-            toe_angle_right = toe_angle_right[:, 1] if toe_angle_right.shape[1] > 1 else toe_angle_right[:, 0]
-        
-        # 转换单位：m -> mm（用于计算斜率）
-        wheel_travel_left_mm = wheel_travel_left * 1000
-        wheel_travel_right_mm = wheel_travel_right * 1000
-        
-        # 查找零位置
-        if zero_position_idx is None:
-            zero_idx_left = find_zero_crossing(wheel_travel_left_mm, wheel_travel_left_mm)
-            zero_idx_right = find_zero_crossing(wheel_travel_right_mm, wheel_travel_right_mm)
-            zero_idx = (zero_idx_left + zero_idx_right) // 2 if zero_idx_left and zero_idx_right else len(wheel_travel_left) // 2
-        else:
-            zero_idx = zero_position_idx
-        
-        # 确定拟合区间
+        logger.debug("计算Bump Steer（按 MATLAB 逻辑）")
+
+        mats = self._build_parallel_travel_matrices()
+        plot_data1 = mats['plot_data1']
+        Row_No = mats['Row_No']
+
+        # MATLAB: 以 Row_No 为中心，左右各 fit_range 个步长
+        zero_idx = Row_No if zero_position_idx is None else zero_position_idx
         fit_start = max(0, zero_idx - fit_range)
-        fit_end = min(len(wheel_travel_left), zero_idx + fit_range + 1)
+        fit_end = min(plot_data1.shape[0], zero_idx + fit_range + 1)
+
+        # X 轴：列 17/18（@WC vertical travel [mm]）
+        wheel_travel_left_mm = plot_data1[:, 16]
+        wheel_travel_right_mm = plot_data1[:, 17]
+
+        # Y 轴：toe 左右（列 1/2，已是 deg）
+        toe_angle_left = plot_data1[:, 0]
+        toe_angle_right = plot_data1[:, 1]
         
         # 左轮拟合
         x_left = wheel_travel_left_mm[fit_start:fit_end]
@@ -160,33 +521,23 @@ class KCCalculator:
         Returns:
             包含左右轮Bump Camber斜率的字典
         """
-        logger.debug("计算Bump Camber")
-        
-        # 提取数据
-        wheel_travel_left, wheel_travel_right = self.extractor.extract_wheel_travel_left_right(convert_length=True)
-        camber_left = self.extractor.extract_by_name('camber_angle', convert_angle=True)
-        camber_right = self.extractor.extract_by_name('camber_angle', convert_angle=True)
-        
-        if camber_left.ndim > 1:
-            camber_left = camber_left[:, 0]
-        if camber_right.ndim > 1:
-            camber_right = camber_right[:, 1] if camber_right.shape[1] > 1 else camber_right[:, 0]
-        
-        # 转换单位
-        wheel_travel_left_mm = wheel_travel_left * 1000
-        wheel_travel_right_mm = wheel_travel_right * 1000
-        
-        # 查找零位置
-        if zero_position_idx is None:
-            zero_idx_left = find_zero_crossing(wheel_travel_left_mm, wheel_travel_left_mm)
-            zero_idx_right = find_zero_crossing(wheel_travel_right_mm, wheel_travel_right_mm)
-            zero_idx = (zero_idx_left + zero_idx_right) // 2 if zero_idx_left and zero_idx_right else len(wheel_travel_left) // 2
-        else:
-            zero_idx = zero_position_idx
-        
-        # 确定拟合区间
+        logger.debug("计算Bump Camber（按 MATLAB 逻辑）")
+
+        mats = self._build_parallel_travel_matrices()
+        plot_data1 = mats['plot_data1']
+        Row_No = mats['Row_No']
+
+        zero_idx = Row_No if zero_position_idx is None else zero_position_idx
         fit_start = max(0, zero_idx - fit_range)
-        fit_end = min(len(wheel_travel_left), zero_idx + fit_range + 1)
+        fit_end = min(plot_data1.shape[0], zero_idx + fit_range + 1)
+
+        # X 轴：列 17/18（@WC vertical travel [mm]）
+        wheel_travel_left_mm = plot_data1[:, 16]
+        wheel_travel_right_mm = plot_data1[:, 17]
+
+        # Y 轴：camber 左右（列 15/16，已是 deg）
+        camber_left = plot_data1[:, 14]
+        camber_right = plot_data1[:, 15]
         
         # 左轮拟合
         x_left = wheel_travel_left_mm[fit_start:fit_end]
@@ -227,57 +578,47 @@ class KCCalculator:
         Returns:
             包含左右轮Wheel Rate的字典
         """
-        logger.debug("计算Wheel Rate")
-        
-        # 提取数据
-        wheel_travel_left, wheel_travel_right = self.extractor.extract_wheel_travel_left_right(convert_length=True)
-        wheel_rate_left = self.extractor.extract_by_name('wheel_rate')
-        wheel_rate_right = self.extractor.extract_by_name('wheel_rate')
-        
-        if wheel_rate_left.ndim > 1:
-            wheel_rate_left = wheel_rate_left[:, 0]
-        if wheel_rate_right.ndim > 1:
-            wheel_rate_right = wheel_rate_right[:, 1] if wheel_rate_right.shape[1] > 1 else wheel_rate_right[:, 0]
-        
-        # 转换单位
-        wheel_travel_left_mm = wheel_travel_left * 1000
-        wheel_travel_right_mm = wheel_travel_right * 1000
-        
-        # 查找零位置
-        if zero_position_idx is None:
-            zero_idx_left = find_zero_crossing(wheel_travel_left_mm, wheel_travel_left_mm)
-            zero_idx_right = find_zero_crossing(wheel_travel_right_mm, wheel_travel_right_mm)
-            zero_idx = (zero_idx_left + zero_idx_right) // 2 if zero_idx_left and zero_idx_right else len(wheel_travel_left) // 2
-        else:
-            zero_idx = zero_position_idx
-        
-        # 确定拟合区间
+        logger.debug("计算Wheel Rate（按 MATLAB 逻辑）")
+
+        mats = self._build_parallel_travel_matrices()
+        plot_data1 = mats['plot_data1']
+        Row_No = mats['Row_No']
+
+        zero_idx = Row_No if zero_position_idx is None else zero_position_idx
         fit_start = max(0, zero_idx - fit_range)
-        fit_end = min(len(wheel_travel_left), zero_idx + fit_range + 1)
-        
+        fit_end = min(plot_data1.shape[0], zero_idx + fit_range + 1)
+
+        # X 轴：列 17/18（@WC vertical travel [mm]）
+        wheel_travel_left_mm = plot_data1[:, 16]
+        wheel_travel_right_mm = plot_data1[:, 17]
+
+        # Y 轴：wheel_rate 左右（列 13/14，单位 N/mm）
+        wheel_rate_left = plot_data1[:, 12]
+        wheel_rate_right = plot_data1[:, 13]
+
         # 左轮拟合
         x_left = wheel_travel_left_mm[fit_start:fit_end]
         y_left = wheel_rate_left[fit_start:fit_end]
         coeffs_left, _ = linear_fit(x_left, y_left, degree=1)
-        
+
         # 右轮拟合
         x_right = wheel_travel_right_mm[fit_start:fit_end]
         y_right = wheel_rate_right[fit_start:fit_end]
         coeffs_right, _ = linear_fit(x_right, y_right, degree=1)
-        
+
         # Wheel Rate斜率（N/mm/mm）
         slope_left = coeffs_left[0]
         slope_right = coeffs_right[0]
-        slope_avg = (slope_left + slope_right) / 2
-        
+        slope_avg = (slope_left + slope_right) / 2.0
+
         # 零位置的Wheel Rate值（N/mm）
         rate_left = wheel_rate_left[zero_idx]
         rate_right = wheel_rate_right[zero_idx]
-        rate_avg = (rate_left + rate_right) / 2
-        
+        rate_avg = (rate_left + rate_right) / 2.0
+
         logger.debug(f"Wheel Rate: 左斜率={slope_left:.2f}, 右斜率={slope_right:.2f}, 平均斜率={slope_avg:.2f} N/mm/mm")
         logger.debug(f"Wheel Rate@WC: 左={rate_left:.2f}, 右={rate_right:.2f}, 平均={rate_avg:.2f} N/mm")
-        
+
         return {
             'left_slope': slope_left,
             'right_slope': slope_right,
@@ -303,53 +644,41 @@ class KCCalculator:
         Returns:
             包含左右轮Wheel Recession斜率的字典
         """
-        logger.debug("计算Wheel Recession")
-        
-        # 提取数据
-        wheel_travel_left, wheel_travel_right = self.extractor.extract_wheel_travel_left_right(convert_length=True)
-        wheel_travel_base_left = self.extractor.extract_by_name('wheel_travel_base', convert_length=True)
-        wheel_travel_base_right = self.extractor.extract_by_name('wheel_travel_base', convert_length=True)
-        
-        if wheel_travel_base_left.ndim > 1:
-            wheel_travel_base_left = wheel_travel_base_left[:, 0]
-        if wheel_travel_base_right.ndim > 1:
-            wheel_travel_base_right = wheel_travel_base_right[:, 1] if wheel_travel_base_right.shape[1] > 1 else wheel_travel_base_right[:, 0]
-        
-        # 转换单位
-        wheel_travel_left_mm = wheel_travel_left * 1000
-        wheel_travel_right_mm = wheel_travel_right * 1000
-        wheel_travel_base_left_mm = wheel_travel_base_left * 1000
-        wheel_travel_base_right_mm = wheel_travel_base_right * 1000
-        
-        # 查找零位置
-        if zero_position_idx is None:
-            zero_idx_left = find_zero_crossing(wheel_travel_left_mm, wheel_travel_left_mm)
-            zero_idx_right = find_zero_crossing(wheel_travel_right_mm, wheel_travel_right_mm)
-            zero_idx = (zero_idx_left + zero_idx_right) // 2 if zero_idx_left and zero_idx_right else len(wheel_travel_left) // 2
-        else:
-            zero_idx = zero_position_idx
-        
-        # 确定拟合区间
+        logger.debug("计算Wheel Recession（按 MATLAB 逻辑）")
+
+        mats = self._build_parallel_travel_matrices()
+        plot_data1 = mats['plot_data1']
+        Row_No = mats['Row_No']
+
+        zero_idx = Row_No if zero_position_idx is None else zero_position_idx
         fit_start = max(0, zero_idx - fit_range)
-        fit_end = min(len(wheel_travel_left), zero_idx + fit_range + 1)
-        
+        fit_end = min(plot_data1.shape[0], zero_idx + fit_range + 1)
+
+        # X 轴：列 17/18（@WC vertical travel [mm]）
+        wheel_travel_left_mm = plot_data1[:, 16]
+        wheel_travel_right_mm = plot_data1[:, 17]
+
+        # Y 轴：wheel recession（wheel_travel_base，列 5/6，mm）
+        wheel_travel_base_left_mm = plot_data1[:, 4]
+        wheel_travel_base_right_mm = plot_data1[:, 5]
+
         # 左轮拟合
         x_left = wheel_travel_left_mm[fit_start:fit_end]
         y_left = wheel_travel_base_left_mm[fit_start:fit_end]
         coeffs_left, _ = linear_fit(x_left, y_left, degree=1)
-        
+
         # 右轮拟合
         x_right = wheel_travel_right_mm[fit_start:fit_end]
         y_right = wheel_travel_base_right_mm[fit_start:fit_end]
         coeffs_right, _ = linear_fit(x_right, y_right, degree=1)
-        
-        # 计算斜率（mm/m = mm/mm * 1000）
-        slope_left = coeffs_left[0] * 1000
-        slope_right = coeffs_right[0] * 1000
-        slope_avg = (slope_left + slope_right) / 2
-        
+
+        # 斜率单位：mm/mm（和 MATLAB polyfit 一致），换算成 mm/m 时乘以 1000
+        slope_left = coeffs_left[0] * 1000.0
+        slope_right = coeffs_right[0] * 1000.0
+        slope_avg = (slope_left + slope_right) / 2.0
+
         logger.debug(f"Wheel Recession: 左={slope_left:.2f}, 右={slope_right:.2f}, 平均={slope_avg:.2f} mm/m")
-        
+
         return {
             'left_slope': slope_left,
             'right_slope': slope_right,
@@ -372,67 +701,42 @@ class KCCalculator:
         Returns:
             包含左右轮Track Change斜率的字典
         """
-        logger.debug("计算Track Change")
-        
-        # 提取数据 - 根据Matlab代码，track change使用tire_contact_point的track分量（Y方向）
-        wheel_travel_left, _ = self.extractor.extract_wheel_travel_left_right(convert_length=True)
-        wheel_travel_right = self.extractor.extract_by_name('wheel_travel', convert_length=True)
-        left_tire_contact = self.extractor.extract_by_name('left_tire_contact_point', convert_length=True)
-        right_tire_contact = self.extractor.extract_by_name('right_tire_contact_point', convert_length=True)
-        
-        # 处理多维数据
-        if wheel_travel_left.ndim > 1:
-            wheel_travel_left = wheel_travel_left[:, 1] if wheel_travel_left.shape[1] > 1 else wheel_travel_left[:, 0]
-        if wheel_travel_right.ndim > 1:
-            wheel_travel_right = wheel_travel_right[:, 1] if wheel_travel_right.shape[1] > 1 else wheel_travel_right[:, 0]
-        
-        # tire_contact_point: 第0列是base，第1列是track（Y方向）
-        if left_tire_contact.ndim > 1:
-            wheel_centre_y_left = left_tire_contact[:, 1]  # track分量（Y方向）
-        else:
-            wheel_centre_y_left = left_tire_contact
-            
-        if right_tire_contact.ndim > 1:
-            wheel_centre_y_right = right_tire_contact[:, 1]  # track分量（Y方向）
-        else:
-            wheel_centre_y_right = right_tire_contact
-        
-        # 转换单位
-        wheel_travel_left_mm = wheel_travel_left * 1000
-        wheel_travel_right_mm = wheel_travel_right * 1000
-        wheel_centre_y_left_mm = wheel_centre_y_left * 1000
-        wheel_centre_y_right_mm = wheel_centre_y_right * 1000
-        
-        # 查找零位置
-        if zero_position_idx is None:
-            zero_idx_left = find_zero_crossing(wheel_travel_left_mm, wheel_travel_left_mm)
-            zero_idx_right = find_zero_crossing(wheel_travel_right_mm, wheel_travel_right_mm)
-            zero_idx = (zero_idx_left + zero_idx_right) // 2 if zero_idx_left and zero_idx_right else len(wheel_travel_left) // 2
-        else:
-            zero_idx = zero_position_idx
-        
-        # 确定拟合区间
+        logger.debug("计算Track Change（按 MATLAB 逻辑）")
+
+        mats = self._build_parallel_travel_matrices()
+        plot_data1 = mats['plot_data1']
+        Row_No = mats['Row_No']
+
+        zero_idx = Row_No if zero_position_idx is None else zero_position_idx
         fit_start = max(0, zero_idx - fit_range)
-        fit_end = min(len(wheel_travel_left), zero_idx + fit_range + 1)
-        
-        # 左轮拟合 - X轴是wheel_travel，Y轴是wheel_centre_y
+        fit_end = min(plot_data1.shape[0], zero_idx + fit_range + 1)
+
+        # X 轴：列 17/18（@WC vertical travel [mm]）
+        wheel_travel_left_mm = plot_data1[:, 16]
+        wheel_travel_right_mm = plot_data1[:, 17]
+
+        # Y 轴：wheel centre Y disp.（列 7/8，mm）
+        wheel_centre_y_left_mm = plot_data1[:, 6]
+        wheel_centre_y_right_mm = plot_data1[:, 7]
+
+        # 左轮拟合
         x_left = wheel_travel_left_mm[fit_start:fit_end]
         y_left = wheel_centre_y_left_mm[fit_start:fit_end]
         coeffs_left, _ = linear_fit(x_left, y_left, degree=1)
-        
-        # 右轮拟合 - X轴是wheel_travel，Y轴是wheel_centre_y
+
+        # 右轮拟合
         x_right = wheel_travel_right_mm[fit_start:fit_end]
         y_right = wheel_centre_y_right_mm[fit_start:fit_end]
         coeffs_right, _ = linear_fit(x_right, y_right, degree=1)
-        
-        # 计算斜率（mm/m）
-        # 注意：根据Matlab代码，左轮斜率需要取负值
-        slope_left = -coeffs_left[0] * 1000  # 左轮取负
-        slope_right = coeffs_right[0] * 1000
-        slope_avg = (slope_left + slope_right) / 2
-        
+
+        # MATLAB: app.TrackChangeEditField.Value
+        # = (P_Left(1,1)*-1000 + P_Right(1,1)*1000)/2
+        slope_left = -coeffs_left[0] * 1000.0
+        slope_right = coeffs_right[0] * 1000.0
+        slope_avg = (slope_left + slope_right) / 2.0
+
         logger.debug(f"Track Change: 左={slope_left:.2f}, 右={slope_right:.2f}, 平均={slope_avg:.2f} mm/m")
-        
+
         return {
             'left_slope': slope_left,
             'right_slope': slope_right,
@@ -455,27 +759,26 @@ class KCCalculator:
         Returns:
             包含50mm轮跳时toe角的字典
         """
-        logger.debug("计算50mm轮跳时的toe角")
-        
-        toe_left = self.extractor.extract_by_name('toe_angle', convert_angle=True)
-        toe_right = self.extractor.extract_by_name('toe_angle', convert_angle=True)
-        
-        # 处理多维数据
-        if toe_left.ndim > 1:
-            toe_left = toe_left[:, 0]
-        if toe_right.ndim > 1:
-            toe_right = toe_right[:, 1] if toe_right.shape[1] > 1 else toe_right[:, 0]
-        
-        result = {}
-        
-        if bump_50mm_idx is not None and bump_50mm_idx < len(toe_left):
-            result['bump_50mm_left'] = toe_left[bump_50mm_idx]
-            result['bump_50mm_right'] = toe_right[bump_50mm_idx]
-        
-        if rebound_50mm_idx is not None and rebound_50mm_idx < len(toe_left):
-            result['rebound_50mm_left'] = toe_left[rebound_50mm_idx]
-            result['rebound_50mm_right'] = toe_right[rebound_50mm_idx]
-        
+        logger.debug("计算50mm轮跳时的toe角（按 MATLAB 逻辑）")
+
+        mats = self._build_parallel_travel_matrices()
+        plot_data1 = mats['plot_data1']
+
+        # MATLAB 固定使用第 76 行 / 第 26 行（假定 101 个步长、±100mm）
+        # 这里直接使用固定行号，与 MATLAB 一致；由上层决定是否采用这些行。
+        toe_left = plot_data1[:, 0]
+        toe_right = plot_data1[:, 1]
+
+        result: Dict[str, float] = {}
+
+        if bump_50mm_idx is not None and 0 <= bump_50mm_idx < len(toe_left):
+            result['bump_50mm_left'] = float(toe_left[bump_50mm_idx])
+            result['bump_50mm_right'] = float(toe_right[bump_50mm_idx])
+
+        if rebound_50mm_idx is not None and 0 <= rebound_50mm_idx < len(toe_left):
+            result['rebound_50mm_left'] = float(toe_left[rebound_50mm_idx])
+            result['rebound_50mm_right'] = float(toe_right[rebound_50mm_idx])
+
         return result
     
     def calculate_2g_wheel_travel_and_rate(self,
@@ -493,53 +796,26 @@ class KCCalculator:
         Returns:
             包含2g载荷时轮跳行程和车轮刚度的字典
         """
-        logger.debug(f"计算{target_load}g载荷时的轮跳行程和车轮刚度")
-        
-        # 获取满载质量（根据Matlab代码使用MaxLoad）
-        if max_load is None:
-            max_load = self.get_vehicle_param('max_load', 0.0)
-        
-        wheel_travel_left, wheel_travel_right = self.extractor.extract_wheel_travel_left_right(convert_length=True)
-        wheel_load_left = self.extractor.extract_by_name('wheel_load_vertical_force')
-        wheel_load_right = self.extractor.extract_by_name('wheel_load_vertical_force')
-        
-        if wheel_load_left.ndim > 1:
-            wheel_load_left = wheel_load_left[:, 0]
-        if wheel_load_right.ndim > 1:
-            wheel_load_right = wheel_load_right[:, 1] if wheel_load_right.shape[1] > 1 else wheel_load_right[:, 0]
-        
-        # 计算目标载荷（N）- 根据Matlab：Wheel_Load*2，其中Wheel_Load=Input_MaxLoad*9.8/2
-        wheel_load = max_load * 9.8 / 2  # 单轮满载载荷
-        target_force = wheel_load * target_load  # 2g载荷
-        
-        # 查找最接近目标载荷的索引（使用左轮载荷）
-        idx_2g = find_value_index(wheel_load_left, target_force)
-        
-        if idx_2g is None:
-            logger.warning(f"未找到{target_load}g载荷位置")
-            return {}
-        
-        # 获取轮跳行程（mm）- 使用左轮垂直行程
-        travel_2g = wheel_travel_left[idx_2g] * 1000  # m -> mm
-        
-        # 获取车轮刚度（N/mm）
-        wheel_rate_left = self.extractor.extract_by_name('wheel_rate')
-        wheel_rate_right = self.extractor.extract_by_name('wheel_rate')
-        
-        if wheel_rate_left.ndim > 1:
-            wheel_rate_left = wheel_rate_left[:, 0]
-        if wheel_rate_right.ndim > 1:
-            wheel_rate_right = wheel_rate_right[:, 1] if wheel_rate_right.shape[1] > 1 else wheel_rate_right[:, 0]
-        
-        rate_2g = (wheel_rate_left[idx_2g] + wheel_rate_right[idx_2g]) / 2
-        
+        logger.debug(f"计算{target_load}g载荷时的轮跳行程和车轮刚度（按 MATLAB 逻辑）")
+
+        mats = self._build_parallel_travel_matrices()
+        data1 = mats['data1']
+        Row_No2g = mats['Row_No2g']
+
+        # data1 末列：wheel_travel（mm），倒数第 3 列：wheel_rate（N/mm）
+        wheel_travel_mm = data1[:, -1]
+        wheel_rate = data1[:, -3]
+
+        travel_2g = float(wheel_travel_mm[Row_No2g])
+        rate_2g = float(wheel_rate[Row_No2g])
+
         logger.debug(f"{target_load}g载荷: 轮跳行程={travel_2g:.2f}mm, 车轮刚度={rate_2g:.2f}N/mm")
-        
+
         return {
             'wheel_travel_2g': travel_2g,
             'wheel_rate_2g': rate_2g,
             'target_load': target_load,
-            'index': idx_2g
+            'index': Row_No2g
         }
     
     def calculate_bump_caster(self,
@@ -554,51 +830,38 @@ class KCCalculator:
         Returns:
             包含左右轮Caster Angle的字典
         """
-        logger.debug("计算Bump Caster")
-        
-        # 提取数据
-        wheel_travel_left, wheel_travel_right = self.extractor.extract_wheel_travel_left_right(convert_length=True)
-        caster_left = self.extractor.extract_by_name('caster_angle', convert_angle=True)
-        caster_right = self.extractor.extract_by_name('caster_angle', convert_angle=True)
-        
-        if caster_left.ndim > 1:
-            caster_left = caster_left[:, 0]
-        if caster_right.ndim > 1:
-            caster_right = caster_right[:, 1] if caster_right.shape[1] > 1 else caster_right[:, 0]
-        
-        # 转换单位
-        wheel_travel_left_mm = wheel_travel_left * 1000
-        wheel_travel_right_mm = wheel_travel_right * 1000
-        
-        # 查找零位置
-        if zero_position_idx is None:
-            zero_idx_left = find_zero_crossing(wheel_travel_left_mm, wheel_travel_left_mm)
-            zero_idx_right = find_zero_crossing(wheel_travel_right_mm, wheel_travel_right_mm)
-            zero_idx = (zero_idx_left + zero_idx_right) // 2 if zero_idx_left and zero_idx_right else len(wheel_travel_left) // 2
-        else:
-            zero_idx = zero_position_idx
-        
-        # 确定拟合区间
+        logger.debug("计算Bump Caster（按 MATLAB 逻辑）")
+
+        mats = self._build_parallel_travel_matrices()
+        plot_data1 = mats['plot_data1']
+        Row_No = mats['Row_No']
+
+        zero_idx = Row_No if zero_position_idx is None else zero_position_idx
         fit_start = max(0, zero_idx - fit_range)
-        fit_end = min(len(wheel_travel_left), zero_idx + fit_range + 1)
-        
-        # 左轮拟合
+        fit_end = min(plot_data1.shape[0], zero_idx + fit_range + 1)
+
+        # X 轴：列 17/18（@WC vertical travel [mm]）
+        wheel_travel_left_mm = plot_data1[:, 16]
+        wheel_travel_right_mm = plot_data1[:, 17]
+
+        # Y 轴：caster 左右（列 25/26，deg）
+        caster_left = plot_data1[:, 24]
+        caster_right = plot_data1[:, 25]
+
         x_left = wheel_travel_left_mm[fit_start:fit_end]
         y_left = caster_left[fit_start:fit_end]
         coeffs_left, _ = linear_fit(x_left, y_left, degree=1)
-        
-        # 右轮拟合
+
         x_right = wheel_travel_right_mm[fit_start:fit_end]
         y_right = caster_right[fit_start:fit_end]
         coeffs_right, _ = linear_fit(x_right, y_right, degree=1)
-        
-        # Caster Angle在零位置的值（deg）
-        caster_at_zero_left = coeffs_left[1]  # 截距
+
+        caster_at_zero_left = coeffs_left[1]
         caster_at_zero_right = coeffs_right[1]
-        caster_at_zero_avg = (caster_at_zero_left + caster_at_zero_right) / 2
-        
+        caster_at_zero_avg = (caster_at_zero_left + caster_at_zero_right) / 2.0
+
         logger.debug(f"Bump Caster@WC: 左={caster_at_zero_left:.2f}, 右={caster_at_zero_right:.2f}, 平均={caster_at_zero_avg:.2f} deg")
-        
+
         return {
             'left_at_zero': caster_at_zero_left,
             'right_at_zero': caster_at_zero_right,
@@ -621,68 +884,38 @@ class KCCalculator:
         Returns:
             包含左右轮Side Swing Arm Angle的字典
         """
-        logger.debug("计算Bump Side Swing Arm Angle")
-        
-        # 提取数据
-        wheel_travel_left, wheel_travel_right = self.extractor.extract_wheel_travel_left_right(convert_length=True)
-        swa_angle_left = self.extractor.extract_by_name('side_view_swing_arm_angle', convert_angle=True)
-        swa_angle_right = self.extractor.extract_by_name('side_view_swing_arm_angle', convert_angle=True)
-        
-        if swa_angle_left.ndim > 1:
-            swa_angle_left = swa_angle_left[:, 0]
-        if swa_angle_right.ndim > 1:
-            swa_angle_right = swa_angle_right[:, 1] if swa_angle_right.shape[1] > 1 else swa_angle_right[:, 0]
-        
-        # 转换单位
-        wheel_travel_left_mm = wheel_travel_left * 1000
-        wheel_travel_right_mm = wheel_travel_right * 1000
-        
-        # 查找零位置
-        if zero_position_idx is None:
-            zero_idx_left = find_zero_crossing(wheel_travel_left_mm, wheel_travel_left_mm)
-            zero_idx_right = find_zero_crossing(wheel_travel_right_mm, wheel_travel_right_mm)
-            zero_idx = (zero_idx_left + zero_idx_right) // 2 if zero_idx_left and zero_idx_right else len(wheel_travel_left) // 2
-        else:
-            zero_idx = zero_position_idx
-        
-        # 确定拟合区间
+        logger.debug("计算Bump Side Swing Arm Angle（按 MATLAB 逻辑）")
+
+        mats = self._build_parallel_travel_matrices()
+        plot_data1 = mats['plot_data1']
+        Row_No = mats['Row_No']
+
+        zero_idx = Row_No if zero_position_idx is None else zero_position_idx
         fit_start = max(0, zero_idx - fit_range)
-        fit_end = min(len(wheel_travel_left), zero_idx + fit_range + 1)
-        
-        # 左轮拟合
+        fit_end = min(plot_data1.shape[0], zero_idx + fit_range + 1)
+
+        # X 轴：列 17/18（@WC vertical travel [mm]）
+        wheel_travel_left_mm = plot_data1[:, 16]
+        wheel_travel_right_mm = plot_data1[:, 17]
+
+        # Y 轴：side swing arm angle 左右（列 21/22，deg）
+        swa_angle_left = plot_data1[:, 20]
+        swa_angle_right = plot_data1[:, 21]
+
         x_left = wheel_travel_left_mm[fit_start:fit_end]
         y_left = swa_angle_left[fit_start:fit_end]
         coeffs_left, _ = linear_fit(x_left, y_left, degree=1)
-        
-        # 右轮拟合
+
         x_right = wheel_travel_right_mm[fit_start:fit_end]
         y_right = swa_angle_right[fit_start:fit_end]
         coeffs_right, _ = linear_fit(x_right, y_right, degree=1)
-        
-        # Side Swing Arm Angle在零位置的值（deg）
-        swa_at_zero_left = coeffs_left[1]  # 截距
+
+        swa_at_zero_left = coeffs_left[1]
         swa_at_zero_right = coeffs_right[1]
-        
-        # 异常值检测：角度值应该在合理范围内（-180到180度）
-        # 如果值异常大，可能是数据提取或单位转换错误
-        angle_warning_threshold = 180.0  # 度
-        if abs(swa_at_zero_left) > angle_warning_threshold:
-            logger.warning(
-                f"Bump Side Swing Arm Angle左轮值异常: {swa_at_zero_left:.3f} deg "
-                f"(超出正常范围 ±{angle_warning_threshold} deg)。"
-                f"可能是数据提取错误或单位转换问题。"
-            )
-        if abs(swa_at_zero_right) > angle_warning_threshold:
-            logger.warning(
-                f"Bump Side Swing Arm Angle右轮值异常: {swa_at_zero_right:.3f} deg "
-                f"(超出正常范围 ±{angle_warning_threshold} deg)。"
-                f"可能是数据提取错误或单位转换问题。"
-            )
-        
-        swa_at_zero_avg = (swa_at_zero_left + swa_at_zero_right) / 2
-        
+        swa_at_zero_avg = (swa_at_zero_left + swa_at_zero_right) / 2.0
+
         logger.debug(f"Bump Side Swing Arm Angle@WC: 左={swa_at_zero_left:.3f}, 右={swa_at_zero_right:.3f}, 平均={swa_at_zero_avg:.3f} deg")
-        
+
         return {
             'left_at_zero': swa_at_zero_left,
             'right_at_zero': swa_at_zero_right,
@@ -705,53 +938,38 @@ class KCCalculator:
         Returns:
             包含左右轮Side Swing Arm Length的字典
         """
-        logger.debug("计算Bump Side Swing Arm Length")
-        
-        # 提取数据
-        wheel_travel_left, wheel_travel_right = self.extractor.extract_wheel_travel_left_right(convert_length=True)
-        swa_length_left = self.extractor.extract_by_name('side_view_swing_arm_length', convert_length=True)
-        swa_length_right = self.extractor.extract_by_name('side_view_swing_arm_length', convert_length=True)
-        
-        if swa_length_left.ndim > 1:
-            swa_length_left = swa_length_left[:, 0]
-        if swa_length_right.ndim > 1:
-            swa_length_right = swa_length_right[:, 1] if swa_length_right.shape[1] > 1 else swa_length_right[:, 0]
-        
-        # 转换单位
-        wheel_travel_left_mm = wheel_travel_left * 1000
-        wheel_travel_right_mm = wheel_travel_right * 1000
-        swa_length_left_mm = swa_length_left * 1000
-        swa_length_right_mm = swa_length_right * 1000
-        
-        # 查找零位置
-        if zero_position_idx is None:
-            zero_idx_left = find_zero_crossing(wheel_travel_left_mm, wheel_travel_left_mm)
-            zero_idx_right = find_zero_crossing(wheel_travel_right_mm, wheel_travel_right_mm)
-            zero_idx = (zero_idx_left + zero_idx_right) // 2 if zero_idx_left and zero_idx_right else len(wheel_travel_left) // 2
-        else:
-            zero_idx = zero_position_idx
-        
-        # 确定拟合区间
+        logger.debug("计算Bump Side Swing Arm Length（按 MATLAB 逻辑）")
+
+        mats = self._build_parallel_travel_matrices()
+        plot_data1 = mats['plot_data1']
+        Row_No = mats['Row_No']
+
+        zero_idx = Row_No if zero_position_idx is None else zero_position_idx
         fit_start = max(0, zero_idx - fit_range)
-        fit_end = min(len(wheel_travel_left), zero_idx + fit_range + 1)
-        
-        # 左轮拟合
+        fit_end = min(plot_data1.shape[0], zero_idx + fit_range + 1)
+
+        # X 轴：列 17/18（@WC vertical travel [mm]）
+        wheel_travel_left_mm = plot_data1[:, 16]
+        wheel_travel_right_mm = plot_data1[:, 17]
+
+        # Y 轴：side swing arm length 左右（列 23/24，mm）
+        swa_length_left_mm = plot_data1[:, 22]
+        swa_length_right_mm = plot_data1[:, 23]
+
         x_left = wheel_travel_left_mm[fit_start:fit_end]
         y_left = swa_length_left_mm[fit_start:fit_end]
         coeffs_left, _ = linear_fit(x_left, y_left, degree=1)
-        
-        # 右轮拟合
+
         x_right = wheel_travel_right_mm[fit_start:fit_end]
         y_right = swa_length_right_mm[fit_start:fit_end]
         coeffs_right, _ = linear_fit(x_right, y_right, degree=1)
-        
-        # Side Swing Arm Length在零位置的值（mm）
-        swa_length_at_zero_left = coeffs_left[1]  # 截距
+
+        swa_length_at_zero_left = coeffs_left[1]
         swa_length_at_zero_right = coeffs_right[1]
-        swa_length_at_zero_avg = (swa_length_at_zero_left + swa_length_at_zero_right) / 2
-        
+        swa_length_at_zero_avg = (swa_length_at_zero_left + swa_length_at_zero_right) / 2.0
+
         logger.debug(f"Bump Side Swing Arm Length@WC: 左={swa_length_at_zero_left:.3f}, 右={swa_length_at_zero_right:.3f}, 平均={swa_length_at_zero_avg:.3f} mm")
-        
+
         return {
             'left_at_zero': swa_length_at_zero_left,
             'right_at_zero': swa_length_at_zero_right,
@@ -774,51 +992,39 @@ class KCCalculator:
         Returns:
             包含左右轮Wheel Rate（载荷斜率）的字典
         """
-        logger.debug("计算Bump Wheel Load")
-        
-        # 提取数据
-        wheel_travel_left, wheel_travel_right = self.extractor.extract_wheel_travel_left_right(convert_length=True)
-        wheel_load_left = self.extractor.extract_by_name('wheel_load_vertical_force')
-        wheel_load_right = self.extractor.extract_by_name('wheel_load_vertical_force')
-        
-        if wheel_load_left.ndim > 1:
-            wheel_load_left = wheel_load_left[:, 0]
-        if wheel_load_right.ndim > 1:
-            wheel_load_right = wheel_load_right[:, 1] if wheel_load_right.shape[1] > 1 else wheel_load_right[:, 0]
-        
-        # 转换单位
-        wheel_travel_left_mm = wheel_travel_left * 1000
-        wheel_travel_right_mm = wheel_travel_right * 1000
-        
-        # 查找零位置
-        if zero_position_idx is None:
-            zero_idx_left = find_zero_crossing(wheel_travel_left_mm, wheel_travel_left_mm)
-            zero_idx_right = find_zero_crossing(wheel_travel_right_mm, wheel_travel_right_mm)
-            zero_idx = (zero_idx_left + zero_idx_right) // 2 if zero_idx_left and zero_idx_right else len(wheel_travel_left) // 2
-        else:
-            zero_idx = zero_position_idx
-        
-        # 确定拟合区间
+        logger.debug("计算Bump Wheel Load（按 MATLAB 逻辑）")
+
+        mats = self._build_parallel_travel_matrices()
+        plot_data1 = mats['plot_data1']
+        Row_No = mats['Row_No']
+
+        zero_idx = Row_No if zero_position_idx is None else zero_position_idx
         fit_start = max(0, zero_idx - fit_range)
-        fit_end = min(len(wheel_travel_left), zero_idx + fit_range + 1)
-        
-        # 左轮拟合
+        fit_end = min(plot_data1.shape[0], zero_idx + fit_range + 1)
+
+        # X 轴：列 17/18（@WC vertical travel [mm]）
+        wheel_travel_left_mm = plot_data1[:, 16]
+        wheel_travel_right_mm = plot_data1[:, 17]
+
+        # Y 轴：wheel load 左右（列 19/20，N）
+        wheel_load_left = plot_data1[:, 18]
+        wheel_load_right = plot_data1[:, 19]
+
         x_left = wheel_travel_left_mm[fit_start:fit_end]
         y_left = wheel_load_left[fit_start:fit_end]
         coeffs_left, _ = linear_fit(x_left, y_left, degree=1)
-        
-        # 右轮拟合
+
         x_right = wheel_travel_right_mm[fit_start:fit_end]
         y_right = wheel_load_right[fit_start:fit_end]
         coeffs_right, _ = linear_fit(x_right, y_right, degree=1)
-        
-        # Wheel Rate（N/mm）- 载荷对轮跳的斜率
-        rate_left = coeffs_left[0]  # N/mm
+
+        # 载荷对轮跳斜率 N/mm
+        rate_left = coeffs_left[0]
         rate_right = coeffs_right[0]
-        rate_avg = (rate_left + rate_right) / 2
-        
+        rate_avg = (rate_left + rate_right) / 2.0
+
         logger.debug(f"Bump Wheel Rate: 左={rate_left:.2f}, 右={rate_right:.2f}, 平均={rate_avg:.2f} N/mm")
-        
+
         return {
             'left_rate': rate_left,
             'right_rate': rate_right,
@@ -836,6 +1042,12 @@ class KCCalculator:
                              zero_position_idx: Optional[int] = None) -> Dict[str, float]:
         """计算Roll Steer（侧倾转向）
         
+        严格按照MATLAB `KinBenchTool_Roll_Plot.m` 的逻辑：
+        - 使用 Susp_oppo_travel_plot_data1 矩阵
+        - X轴：列12（roll_angle @WC）
+        - Y轴：列1（toe_left）、列2（toe_right）
+        - 拟合区间：Row_No ± 10*fit_range
+        
         Args:
             fit_range: 拟合区间范围（度），默认1.0度
             zero_position_idx: 零位置索引
@@ -843,49 +1055,34 @@ class KCCalculator:
         Returns:
             包含左右轮Roll Steer系数的字典
         """
-        logger.debug("计算Roll Steer")
+        logger.debug("计算Roll Steer（按 MATLAB 逻辑）")
         
-        # 提取数据
-        roll_angle = self.extractor.extract_by_name('roll_angle', convert_angle=True)
-        toe_left = self.extractor.extract_by_name('toe_angle', convert_angle=True)
-        toe_right = self.extractor.extract_by_name('toe_angle', convert_angle=True)
+        mats = self._build_opposite_travel_matrices()
+        plot_data1 = mats['plot_data1']
+        Row_No = mats['Row_No']
         
-        # 处理多维数据（roll_angle通常是WC和CP两列）
-        if roll_angle.ndim > 1:
-            roll_angle_wc = roll_angle[:, 0]  # @WC roll angle
-        else:
-            roll_angle_wc = roll_angle
-        
-        if toe_left.ndim > 1:
-            toe_left = toe_left[:, 0]
-        if toe_right.ndim > 1:
-            toe_right = toe_right[:, 1] if toe_right.shape[1] > 1 else toe_right[:, 0]
-        
-        # 查找零位置
-        if zero_position_idx is None:
-            zero_idx = find_zero_crossing(roll_angle_wc, roll_angle_wc)
-            if zero_idx is None:
-                zero_idx = len(roll_angle_wc) // 2
-        else:
-            zero_idx = zero_position_idx
-        
-        # 确定拟合区间（转换为索引范围，假设每度对应10个数据点）
-        fit_range_idx = int(fit_range * 10)
+        # MATLAB: 使用 Row_No ± 10*fit_range 作为拟合区间
+        zero_idx = Row_No if zero_position_idx is None else zero_position_idx
+        fit_range_idx = int(10 * fit_range)  # MATLAB: 10*app.EditField_R_roll_range.Value
         fit_start = max(0, zero_idx - fit_range_idx)
-        fit_end = min(len(roll_angle_wc), zero_idx + fit_range_idx + 1)
+        fit_end = min(plot_data1.shape[0], zero_idx + fit_range_idx + 1)
         
-        # 左轮拟合
+        # MATLAB: X轴是列12（roll_angle @WC），Y轴是列1（toe_left）和列2（toe_right）
+        roll_angle_wc = plot_data1[:, 11]  # 列12（索引11）：roll_angle @WC
+        toe_left = plot_data1[:, 0]        # 列1：toe_left
+        toe_right = plot_data1[:, 1]       # 列2：toe_right
+        
+        # MATLAB: polyfit(Susp_oppo_travel_plot_data1(Row_No-10*range:Row_No+10*range,12), 
+        #                  Susp_oppo_travel_plot_data1(Row_No-10*range:Row_No+10*range,1), 1)
         x_left = roll_angle_wc[fit_start:fit_end]
         y_left = toe_left[fit_start:fit_end]
         coeffs_left, _ = linear_fit(x_left, y_left, degree=1)
         
-        # 右轮拟合
         x_right = roll_angle_wc[fit_start:fit_end]
         y_right = toe_right[fit_start:fit_end]
         coeffs_right, _ = linear_fit(x_right, y_right, degree=1)
         
-        # Roll Steer系数（deg/deg）
-        # 注意：右轮需要取负值（MATLAB代码中：*-1）
+        # MATLAB: app.RollSteerEditField.Value = (round(P_left(1,1),3) + round(P_right(1,1),3)*-1)/2
         slope_left = coeffs_left[0]
         slope_right = -coeffs_right[0]  # 右轮取负
         slope_avg = (slope_left + slope_right) / 2
@@ -907,6 +1104,12 @@ class KCCalculator:
                              zero_position_idx: Optional[int] = None) -> Dict[str, float]:
         """计算Roll Camber（侧倾外倾）
         
+        严格按照MATLAB `KinBenchTool_Roll_Plot.m` 的逻辑：
+        - 使用 Susp_oppo_travel_plot_data1 矩阵
+        - X轴：列12（roll_angle @WC）
+        - Y轴：列3（camber_left）、列4（camber_right）
+        - 拟合区间：Row_No ± 10*fit_range
+        
         Args:
             fit_range: 拟合区间范围（度），默认1.0度
             zero_position_idx: 零位置索引
@@ -914,48 +1117,34 @@ class KCCalculator:
         Returns:
             包含左右轮Roll Camber系数的字典
         """
-        logger.debug("计算Roll Camber")
+        logger.debug("计算Roll Camber（按 MATLAB 逻辑）")
         
-        # 提取数据
-        roll_angle = self.extractor.extract_by_name('roll_angle', convert_angle=True)
-        camber_left = self.extractor.extract_by_name('camber_angle', convert_angle=True)
-        camber_right = self.extractor.extract_by_name('camber_angle', convert_angle=True)
+        mats = self._build_opposite_travel_matrices()
+        plot_data1 = mats['plot_data1']
+        Row_No = mats['Row_No']
         
-        # 处理多维数据
-        if roll_angle.ndim > 1:
-            roll_angle_wc = roll_angle[:, 0]
-        else:
-            roll_angle_wc = roll_angle
-        
-        if camber_left.ndim > 1:
-            camber_left = camber_left[:, 0]
-        if camber_right.ndim > 1:
-            camber_right = camber_right[:, 1] if camber_right.shape[1] > 1 else camber_right[:, 0]
-        
-        # 查找零位置
-        if zero_position_idx is None:
-            zero_idx = find_zero_crossing(roll_angle_wc, roll_angle_wc)
-            if zero_idx is None:
-                zero_idx = len(roll_angle_wc) // 2
-        else:
-            zero_idx = zero_position_idx
-        
-        # 确定拟合区间
-        fit_range_idx = int(fit_range * 10)
+        # MATLAB: 使用 Row_No ± 10*fit_range 作为拟合区间
+        zero_idx = Row_No if zero_position_idx is None else zero_position_idx
+        fit_range_idx = int(10 * fit_range)
         fit_start = max(0, zero_idx - fit_range_idx)
-        fit_end = min(len(roll_angle_wc), zero_idx + fit_range_idx + 1)
+        fit_end = min(plot_data1.shape[0], zero_idx + fit_range_idx + 1)
         
-        # 左轮拟合
+        # MATLAB: X轴是列12（roll_angle @WC），Y轴是列3（camber_left）和列4（camber_right）
+        roll_angle_wc = plot_data1[:, 11]  # 列12（索引11）：roll_angle @WC
+        camber_left = plot_data1[:, 2]     # 列3：camber_left
+        camber_right = plot_data1[:, 3]    # 列4：camber_right
+        
+        # MATLAB: polyfit(Susp_oppo_travel_plot_data1(Row_No-10*range:Row_No+10*range,12), 
+        #                  Susp_oppo_travel_plot_data1(Row_No-10*range:Row_No+10*range,3), 1)
         x_left = roll_angle_wc[fit_start:fit_end]
         y_left = camber_left[fit_start:fit_end]
         coeffs_left, _ = linear_fit(x_left, y_left, degree=1)
         
-        # 右轮拟合
         x_right = roll_angle_wc[fit_start:fit_end]
         y_right = camber_right[fit_start:fit_end]
         coeffs_right, _ = linear_fit(x_right, y_right, degree=1)
         
-        # Roll Camber系数（deg/deg）
+        # MATLAB: app.RollCamberEditField.Value = (round(P_left(1,1),3) + round(P_right(1,1),3)*-1)/2
         slope_left = coeffs_left[0]
         slope_right = -coeffs_right[0]  # 右轮取负
         slope_avg = (slope_left + slope_right) / 2
@@ -977,7 +1166,12 @@ class KCCalculator:
                                              zero_position_idx: Optional[int] = None) -> Dict[str, float]:
         """计算Roll Camber Relative Ground（相对地面外倾）
         
-        camber_relative_ground = camber + roll_angle_CP
+        严格按照MATLAB `KinBenchTool_Roll_Plot.m` 的逻辑：
+        - 使用 Susp_oppo_travel_plot_data1 矩阵
+        - X轴：列12（roll_angle @WC）
+        - Y轴：列14（camber_relative_ground_left）、列15（camber_relative_ground_right）
+        - 这些列已经在 _build_opposite_travel_matrices 中计算好
+        - 拟合区间：Row_No ± 10*fit_range
         
         Args:
             fit_range: 拟合区间范围（度），默认1.0度
@@ -986,48 +1180,31 @@ class KCCalculator:
         Returns:
             包含左右轮Roll Camber Relative Ground系数的字典
         """
-        logger.debug("计算Roll Camber Relative Ground")
+        logger.debug("计算Roll Camber Relative Ground（按 MATLAB 逻辑）")
         
-        # 提取数据
-        roll_angle = self.extractor.extract_by_name('roll_angle', convert_angle=True)
-        camber_left = self.extractor.extract_by_name('camber_angle', convert_angle=True)
-        camber_right = self.extractor.extract_by_name('camber_angle', convert_angle=True)
+        mats = self._build_opposite_travel_matrices()
+        plot_data1 = mats['plot_data1']
+        Row_No = mats['Row_No']
         
-        # 处理多维数据
-        if roll_angle.ndim > 1:
-            roll_angle_cp = roll_angle[:, 1]  # @CP roll angle
-        else:
-            roll_angle_cp = roll_angle
-        
-        if camber_left.ndim > 1:
-            camber_left = camber_left[:, 0]
-        if camber_right.ndim > 1:
-            camber_right = camber_right[:, 1] if camber_right.shape[1] > 1 else camber_right[:, 0]
-        
-        # 计算相对地面外倾角
-        camber_ground_left = camber_left + roll_angle_cp
-        camber_ground_right = camber_right - roll_angle_cp  # 右轮取负
-        
-        # 查找零位置
-        if zero_position_idx is None:
-            zero_idx = find_zero_crossing(roll_angle_cp, roll_angle_cp)
-            if zero_idx is None:
-                zero_idx = len(roll_angle_cp) // 2
-        else:
-            zero_idx = zero_position_idx
-        
-        # 确定拟合区间
-        fit_range_idx = int(fit_range * 10)
+        # MATLAB: 使用 Row_No ± 10*fit_range 作为拟合区间
+        zero_idx = Row_No if zero_position_idx is None else zero_position_idx
+        fit_range_idx = int(10 * fit_range)
         fit_start = max(0, zero_idx - fit_range_idx)
-        fit_end = min(len(roll_angle_cp), zero_idx + fit_range_idx + 1)
+        fit_end = min(plot_data1.shape[0], zero_idx + fit_range_idx + 1)
+        
+        # MATLAB: X轴是列12（roll_angle @WC），Y轴是列14和15（camber_relative_ground）
+        # 列14 = camber_left + roll_angle_CP，列15 = camber_right - roll_angle_CP
+        roll_angle_wc = plot_data1[:, 11]  # 列12（索引11）：roll_angle @WC
+        camber_ground_left = plot_data1[:, 13]   # 列14：camber_relative_ground_left
+        camber_ground_right = plot_data1[:, 14]  # 列15：camber_relative_ground_right
         
         # 左轮拟合
-        x_left = roll_angle_cp[fit_start:fit_end]
+        x_left = roll_angle_wc[fit_start:fit_end]
         y_left = camber_ground_left[fit_start:fit_end]
         coeffs_left, _ = linear_fit(x_left, y_left, degree=1)
         
         # 右轮拟合
-        x_right = roll_angle_cp[fit_start:fit_end]
+        x_right = roll_angle_wc[fit_start:fit_end]
         y_right = camber_ground_right[fit_start:fit_end]
         coeffs_right, _ = linear_fit(x_right, y_right, degree=1)
         
@@ -1051,68 +1228,57 @@ class KCCalculator:
     def calculate_roll_rate(self) -> Dict[str, float]:
         """计算Roll Rate（侧倾刚度）
         
+        严格按照MATLAB `KinBenchTool_Roll_Plot.m` 的逻辑：
+        - 使用 Susp_opposite_travel_data1 矩阵
+        - 列9：susp_roll_rate，列10：total_roll_rate
+        - 取 Row_No 位置的值
+        
         Returns:
             包含悬架侧倾刚度和总侧倾刚度的字典
         """
-        logger.debug("计算Roll Rate")
+        logger.debug("计算Roll Rate（按 MATLAB 逻辑）")
         
-        # 提取数据
-        susp_roll_rate = self.extractor.extract_by_name('susp_roll_rate')
-        total_roll_rate = self.extractor.extract_by_name('total_roll_rate')
+        mats = self._build_opposite_travel_matrices()
+        data1 = mats['data1']
+        Row_No = mats['Row_No']
         
-        # 如果是多维的，取第一列
-        if susp_roll_rate.ndim > 1:
-            susp_roll_rate = susp_roll_rate[:, 0]
-        if total_roll_rate.ndim > 1:
-            total_roll_rate = total_roll_rate[:, 0]
-        
-        # 单位转换：从 mm/deg 转换为 Nm/deg
-        # 注意：MATLAB代码中有单位转换，这里需要根据实际情况调整
-        # 假设数据已经是正确的单位，或者需要乘以某个转换系数
-        
-        # 取零位置的值（通常是中间位置）
-        zero_idx = len(susp_roll_rate) // 2
-        
-        susp_rate = susp_roll_rate[zero_idx]
-        total_rate = total_roll_rate[zero_idx]
+        # MATLAB: 列9和10是 susp_roll_rate 和 total_roll_rate（已转换单位）
+        susp_rate = float(data1[Row_No, 8])   # 列9（索引8）：susp_roll_rate
+        total_rate = float(data1[Row_No, 9]) # 列10（索引9）：total_roll_rate
         
         logger.debug(f"Roll Rate: 悬架={susp_rate:.2f}, 总={total_rate:.2f} Nm/deg")
         
         return {
             'susp_roll_rate': susp_rate,
             'total_roll_rate': total_rate,
-            'zero_position_idx': zero_idx
+            'zero_position_idx': Row_No
         }
     
     def calculate_roll_center_height(self) -> Dict[str, float]:
         """计算Roll Center Height（侧倾中心高度）
         
+        严格按照MATLAB `KinBenchTool_Roll_Plot.m` 的逻辑：
+        - 使用 Susp_opposite_travel_data1 矩阵
+        - 列11：roll_center_location vertical（已转换单位）
+        - 取 Row_No 位置的值
+        
         Returns:
             包含侧倾中心高度的字典
         """
-        logger.debug("计算Roll Center Height")
+        logger.debug("计算Roll Center Height（按 MATLAB 逻辑）")
         
-        # 提取数据
-        roll_center_location = self.extractor.extract_by_name('roll_center_location', convert_length=True)
+        mats = self._build_opposite_travel_matrices()
+        data1 = mats['data1']
+        Row_No = mats['Row_No']
         
-        # 处理多维数据（通常是lateral和vertical两列）
-        if roll_center_location.ndim > 1:
-            roll_center_height = roll_center_location[:, 1]  # vertical
-        else:
-            roll_center_height = roll_center_location
-        
-        # 转换单位：m -> mm
-        roll_center_height_mm = roll_center_height * 1000
-        
-        # 取零位置的值
-        zero_idx = len(roll_center_height_mm) // 2
-        height = roll_center_height_mm[zero_idx]
+        # MATLAB: 列11是 roll_center_location vertical（单位：mm）
+        height = float(data1[Row_No, 10])  # 列11（索引10）：roll_center_height
         
         logger.debug(f"Roll Center Height: {height:.2f} mm")
         
         return {
             'roll_center_height': height,
-            'zero_position_idx': zero_idx
+            'zero_position_idx': Row_No
         }
     
     # ==================== Static Load Lateral计算 ====================

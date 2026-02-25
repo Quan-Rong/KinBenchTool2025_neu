@@ -24,7 +24,8 @@ from .plot_utils import (
 from .bump_plot import (
     plot_bump_steer,
     plot_bump_camber,
-    plot_wheel_rate,
+    plot_wheel_rate_slope,
+    plot_wheel_rate_wc,
     plot_wheel_recession,
     plot_track_change,
     plot_bump_caster,
@@ -68,7 +69,8 @@ __all__ = [
     # Bump测试绘图
     'plot_bump_steer',
     'plot_bump_camber',
-    'plot_wheel_rate',
+    'plot_wheel_rate_slope',
+    'plot_wheel_rate_wc',
     'plot_wheel_recession',
     'plot_track_change',
     'plot_bump_caster',

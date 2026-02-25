@@ -10,7 +10,7 @@ from matplotlib.axes import Axes
 from .plot_utils import (
     setup_axes_style, plot_data_curve, plot_fit_line, plot_sample_points,
     add_fit_formula_text, add_direction_indicator,
-    setup_legend, convert_matlab_color_to_python, add_custom_text
+    setup_legend, convert_matlab_color_to_python, add_custom_text, get_compare_style
 )
 from ..data import KCCalculator
 from ..utils.logger import get_logger
@@ -77,17 +77,28 @@ def plot_roll_steer(ax_left: Axes,
     y_fit_left = np.polyval(coeffs_left, roll_angle_wc)
     y_fit_right = np.polyval(coeffs_right_display, roll_angle_wc)
     
-    # 转换颜色
-    curve_color = convert_matlab_color_to_python(curve_color) if curve_color else None
-    fit_color = convert_matlab_color_to_python(fit_color) if fit_color else None
+    # 如果compare_count > 0，使用对比样式（灰色曲线+蓝色拟合线）
+    if compare_count > 0:
+        compare_style = get_compare_style(compare_count)
+        curve_color = compare_style['curve_color']  # 灰色
+        fit_color = compare_style['fit_color']      # 蓝色
+        curve_linestyle = compare_style['curve_linestyle']
+        fit_linestyle = compare_style['fit_linestyle']
+    else:
+        # 转换颜色（仅当compare_count=0时）
+        curve_color = convert_matlab_color_to_python(curve_color) if curve_color else None
+        fit_color = convert_matlab_color_to_python(fit_color) if fit_color else None
+        curve_linestyle = '-'
+        fit_linestyle = '-'
     
     # 绘制左轮
     plot_data_curve(ax_left, roll_angle_wc, toe_left,
-                   label='Result', color=curve_color)
+                   label='Result', color=curve_color, linestyle=curve_linestyle)
     plot_fit_line(ax_left, roll_angle_wc, y_fit_left,
                  fit_range=(roll_angle_wc[fit_start], roll_angle_wc[fit_end-1]),
                  label=f'curve fitting [{-fit_range:.1f}°, {fit_range:.1f}°]',
-                 color=fit_color, markevery=(0, fit_end-fit_start-1))
+                 color=fit_color, markevery=(0, fit_end-fit_start-1),
+                 linestyle=fit_linestyle)
     if show_sample_points_left:
         plot_sample_points(ax_left, roll_angle_wc, toe_left,
                           fit_start, fit_end, color=curve_color)
@@ -102,11 +113,12 @@ def plot_roll_steer(ax_left: Axes,
     # 绘制右轮（注意右轮数据需要取负）
     toe_right_neg = -toe_right  # 右轮取负
     plot_data_curve(ax_right, roll_angle_wc, toe_right_neg,
-                   label='Result', color=curve_color)
+                   label='Result', color=curve_color, linestyle=curve_linestyle)
     plot_fit_line(ax_right, roll_angle_wc, y_fit_right,
                  fit_range=(roll_angle_wc[fit_start], roll_angle_wc[fit_end-1]),
                  label=f'curve fitting [{-fit_range:.1f}°, {fit_range:.1f}°]',
-                 color=fit_color, markevery=(0, fit_end-fit_start-1))
+                 color=fit_color, markevery=(0, fit_end-fit_start-1),
+                 linestyle=fit_linestyle)
     if show_sample_points_right:
         plot_sample_points(ax_right, roll_angle_wc, toe_right_neg,
                           fit_start, fit_end, color=curve_color)
@@ -177,17 +189,28 @@ def plot_roll_camber(ax_left: Axes,
     y_fit_left = np.polyval(coeffs_left, roll_angle_wc)
     y_fit_right = np.polyval(coeffs_right_display, roll_angle_wc)
     
-    # 转换颜色
-    curve_color = convert_matlab_color_to_python(curve_color) if curve_color else None
-    fit_color = convert_matlab_color_to_python(fit_color) if fit_color else None
+    # 如果compare_count > 0，使用对比样式（灰色曲线+蓝色拟合线）
+    if compare_count > 0:
+        compare_style = get_compare_style(compare_count)
+        curve_color = compare_style['curve_color']  # 灰色
+        fit_color = compare_style['fit_color']      # 蓝色
+        curve_linestyle = compare_style['curve_linestyle']
+        fit_linestyle = compare_style['fit_linestyle']
+    else:
+        # 转换颜色（仅当compare_count=0时）
+        curve_color = convert_matlab_color_to_python(curve_color) if curve_color else None
+        fit_color = convert_matlab_color_to_python(fit_color) if fit_color else None
+        curve_linestyle = '-'
+        fit_linestyle = '-'
     
     # 绘制左轮
     plot_data_curve(ax_left, roll_angle_wc, camber_left,
-                   label='Result', color=curve_color)
+                   label='Result', color=curve_color, linestyle=curve_linestyle)
     plot_fit_line(ax_left, roll_angle_wc, y_fit_left,
                  fit_range=(roll_angle_wc[fit_start], roll_angle_wc[fit_end-1]),
                  label=f'curve fitting [{-fit_range:.1f}°, {fit_range:.1f}°]',
-                 color=fit_color, markevery=(0, fit_end-fit_start-1))
+                 color=fit_color, markevery=(0, fit_end-fit_start-1),
+                 linestyle=fit_linestyle)
     if show_sample_points_left:
         plot_sample_points(ax_left, roll_angle_wc, camber_left,
                           fit_start, fit_end, color=curve_color)
@@ -202,11 +225,12 @@ def plot_roll_camber(ax_left: Axes,
     # 绘制右轮（注意右轮数据需要取负）
     camber_right_neg = -camber_right
     plot_data_curve(ax_right, roll_angle_wc, camber_right_neg,
-                   label='Result', color=curve_color)
+                   label='Result', color=curve_color, linestyle=curve_linestyle)
     plot_fit_line(ax_right, roll_angle_wc, y_fit_right,
                  fit_range=(roll_angle_wc[fit_start], roll_angle_wc[fit_end-1]),
                  label=f'curve fitting [{-fit_range:.1f}°, {fit_range:.1f}°]',
-                 color=fit_color, markevery=(0, fit_end-fit_start-1))
+                 color=fit_color, markevery=(0, fit_end-fit_start-1),
+                 linestyle=fit_linestyle)
     if show_sample_points_right:
         plot_sample_points(ax_right, roll_angle_wc, camber_right_neg,
                           fit_start, fit_end, color=curve_color)
@@ -281,17 +305,28 @@ def plot_roll_camber_relative_ground(ax_left: Axes,
     y_fit_left = np.polyval(coeffs_left, roll_angle_wc)
     y_fit_right = np.polyval(coeffs_right_display, roll_angle_wc)
     
-    # 转换颜色
-    curve_color = convert_matlab_color_to_python(curve_color) if curve_color else None
-    fit_color = convert_matlab_color_to_python(fit_color) if fit_color else None
+    # 如果compare_count > 0，使用对比样式（灰色曲线+蓝色拟合线）
+    if compare_count > 0:
+        compare_style = get_compare_style(compare_count)
+        curve_color = compare_style['curve_color']  # 灰色
+        fit_color = compare_style['fit_color']      # 蓝色
+        curve_linestyle = compare_style['curve_linestyle']
+        fit_linestyle = compare_style['fit_linestyle']
+    else:
+        # 转换颜色（仅当compare_count=0时）
+        curve_color = convert_matlab_color_to_python(curve_color) if curve_color else None
+        fit_color = convert_matlab_color_to_python(fit_color) if fit_color else None
+        curve_linestyle = '-'
+        fit_linestyle = '-'
     
     # 绘制左轮
     plot_data_curve(ax_left, roll_angle_wc, camber_rel_ground_left,
-                   label='Result', color=curve_color)
+                   label='Result', color=curve_color, linestyle=curve_linestyle)
     plot_fit_line(ax_left, roll_angle_wc, y_fit_left,
                  fit_range=(roll_angle_wc[fit_start], roll_angle_wc[fit_end-1]),
                  label=f'curve fitting [{-fit_range:.1f}°, {fit_range:.1f}°]',
-                 color=fit_color, markevery=(0, fit_end-fit_start-1))
+                 color=fit_color, markevery=(0, fit_end-fit_start-1),
+                 linestyle=fit_linestyle)
     if show_sample_points_left:
         plot_sample_points(ax_left, roll_angle_wc, camber_rel_ground_left,
                           fit_start, fit_end, color=curve_color)
@@ -306,11 +341,12 @@ def plot_roll_camber_relative_ground(ax_left: Axes,
     # 绘制右轮
     camber_rel_ground_right_neg = -camber_rel_ground_right
     plot_data_curve(ax_right, roll_angle_wc, camber_rel_ground_right_neg,
-                   label='Result', color=curve_color)
+                   label='Result', color=curve_color, linestyle=curve_linestyle)
     plot_fit_line(ax_right, roll_angle_wc, y_fit_right,
                  fit_range=(roll_angle_wc[fit_start], roll_angle_wc[fit_end-1]),
                  label=f'curve fitting [{-fit_range:.1f}°, {fit_range:.1f}°]',
-                 color=fit_color, markevery=(0, fit_end-fit_start-1))
+                 color=fit_color, markevery=(0, fit_end-fit_start-1),
+                 linestyle=fit_linestyle)
     if show_sample_points_right:
         plot_sample_points(ax_right, roll_angle_wc, camber_rel_ground_right_neg,
                           fit_start, fit_end, color=curve_color)
