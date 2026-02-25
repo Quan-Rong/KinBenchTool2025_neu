@@ -51,6 +51,13 @@ class ColoredTabBar(QTabBar):
             if tab_rect.isEmpty():
                 continue
             
+            # 在标签之间增加一些视觉间隔：
+            # 将实际绘制区域略微缩小，让相邻标签之间露出一点底色，
+            # 看起来就不像一整条连续色块，而是一个个独立的“标签页”。
+            draw_rect = tab_rect.adjusted(3, 0, -3, 0)
+            if draw_rect.isEmpty():
+                draw_rect = tab_rect
+            
             # 获取标签颜色
             bg_color = self.tab_colors[i] if i < len(self.tab_colors) else QColor(200, 220, 255, 180)
             
@@ -62,16 +69,16 @@ class ColoredTabBar(QTabBar):
             painter.setBrush(bg_color)
             painter.setPen(QColor(255, 255, 255, 80))
             # 只绘制上方的圆角
-            painter.drawRoundedRect(tab_rect.adjusted(0, 0, -1, 0), 8, 8)
+            painter.drawRoundedRect(draw_rect.adjusted(0, 0, -1, 0), 8, 8)
             
             # 如果是选中的标签，绘制底部边框
             if i == self.currentIndex():
                 painter.setPen(QColor(102, 126, 234, 255))
                 painter.setBrush(Qt.BrushStyle.NoBrush)
-                painter.drawLine(tab_rect.left() + 1, tab_rect.bottom() - 1, 
-                               tab_rect.right() - 1, tab_rect.bottom() - 1)
-                painter.drawLine(tab_rect.left() + 1, tab_rect.bottom() - 2, 
-                               tab_rect.right() - 1, tab_rect.bottom() - 2)
+                painter.drawLine(draw_rect.left() + 1, draw_rect.bottom() - 1, 
+                               draw_rect.right() - 1, draw_rect.bottom() - 1)
+                painter.drawLine(draw_rect.left() + 1, draw_rect.bottom() - 2, 
+                               draw_rect.right() - 1, draw_rect.bottom() - 2)
         
         # 调用父类方法绘制文字和图标（但需要确保文字是黑色的）
         # 先设置文字颜色为黑色
@@ -98,8 +105,13 @@ class MainWindow(QMainWindow):
         super().__init__(parent)
         
         self.setWindowTitle("KinBench Tool - K&C Analysis")
-        # 设置窗口大小，优化比例：宽度1600，高度1000，黄金比例更和谐
-        self.resize(1600, 1000)
+        # 设置窗口大小
+        # 这里专门调整默认高宽比：
+        # - 左侧车辆参数面板默认约320px
+        # - 右侧结果区使用左右两个对比图（ComparisonPlotWidget），并排放置
+        # 选取宽度1600、高度800，使右侧每个子图的可用高度大致接近其宽度的一半，
+        # 从而在程序一打开时，Bump Steer 等结果页中的左右两个绘图区看起来接近正方形。
+        self.resize(1600, 800)
         self.setMinimumSize(1280, 720)
         
         # 设置窗口图标
@@ -177,11 +189,11 @@ class MainWindow(QMainWindow):
             }
             QMenuBar::item {
                 background-color: transparent;
-                padding: 6px 12px;
+                padding: 6px 14px;
                 border-radius: 6px;
                 color: #1e293b;
                 font-weight: 500;
-                font-size: 11px;
+                font-size: 12px;
             }
             QMenuBar::item:selected {
                 background-color: #f1f5f9;
@@ -197,7 +209,7 @@ class MainWindow(QMainWindow):
                 padding: 6px 16px;
                 border-radius: 6px;
                 color: #334155;
-                font-size: 11px;
+                font-size: 12px;
             }
             QMenu::item:selected {
                 background-color: #6366f1;
@@ -215,7 +227,7 @@ class MainWindow(QMainWindow):
             /* GroupBox - 半透明毛玻璃效果 */
             QGroupBox {
                 font-weight: 600;
-                font-size: 11px;
+                font-size: 12px;
                 color: #1e293b;
                 border: 1px solid rgba(255, 255, 255, 0.3);
                 border-radius: 12px;
@@ -234,7 +246,7 @@ class MainWindow(QMainWindow):
                 background-color: rgba(255, 255, 255, 0.9);
                 color: #000000;
                 font-weight: 700;
-                font-size: 13px;
+                font-size: 14px;
             }
             
             /* 按钮 - 现代化渐变设计（保持不透明以确保可读性） */
@@ -246,7 +258,7 @@ class MainWindow(QMainWindow):
                 padding: 4px 12px;
                 border-radius: 6px;
                 font-weight: 600;
-                font-size: 11px;
+                font-size: 12px;
                 min-height: 24px;
                 max-height: 28px;
                 min-width: 60px;
@@ -282,7 +294,7 @@ class MainWindow(QMainWindow):
                 border-radius: 6px;
                 background-color: rgba(255, 255, 255, 0.85);
                 color: #1e293b;
-                font-size: 11px;
+                font-size: 12px;
                 min-height: 24px;
                 max-height: 28px;
                 selection-background-color: #667eea;
@@ -305,7 +317,7 @@ class MainWindow(QMainWindow):
                 border-radius: 6px;
                 background-color: rgba(255, 255, 255, 0.85);
                 color: #1e293b;
-                font-size: 11px;
+                font-size: 12px;
                 min-height: 24px;
                 max-height: 28px;
                 selection-background-color: #667eea;
@@ -369,7 +381,7 @@ class MainWindow(QMainWindow):
             /* Label - 现代化设计 */
             QLabel {
                 color: #334155;
-                font-size: 11px;
+                font-size: 12px;
             }
             
             /* ComboBox - 半透明毛玻璃效果 */
@@ -379,7 +391,7 @@ class MainWindow(QMainWindow):
                 border-radius: 6px;
                 background-color: rgba(255, 255, 255, 0.85);
                 color: #1e293b;
-                font-size: 11px;
+                font-size: 12px;
                 min-height: 24px;
                 max-height: 28px;
             }
@@ -413,7 +425,7 @@ class MainWindow(QMainWindow):
                 padding: 3px 6px;
                 border-radius: 4px;
                 min-height: 16px;
-                font-size: 11px;
+                font-size: 12px;
             }
             QComboBox QAbstractItemView::item:hover {
                 background-color: rgba(241, 245, 249, 0.8);
@@ -430,7 +442,7 @@ class MainWindow(QMainWindow):
                 border-radius: 10px;
                 background-color: rgba(255, 255, 255, 0.85);
                 color: #1e293b;
-                font-size: 13px;
+                font-size: 14px;
                 selection-background-color: #667eea;
                 selection-color: white;
             }
@@ -556,6 +568,8 @@ class MainWindow(QMainWindow):
         self.kc_tabs.setTabPosition(QTabWidget.TabPosition.North)
         # 使用自定义的ColoredTabBar
         custom_tab_bar = ColoredTabBar()
+        # 为主测试TabBar设置对象名，便于在样式表中单独控制间距等细节
+        custom_tab_bar.setObjectName("mainTabBar")
         self.kc_tabs.setTabBar(custom_tab_bar)
         
         # 添加各个Tab（传递车辆参数面板引用）
@@ -893,9 +907,9 @@ class MainWindow(QMainWindow):
                 if version_file.exists():
                     version_text = f"v{version_file.read_text().strip()}"
                 else:
-                    version_text = "v0.3.2"
+                    version_text = "v0.3.4"
             except Exception:
-                version_text = "v0.3.2"
+                version_text = "v0.3.4"
         
         version_label = QLabel(version_text)
         version_label.setStyleSheet("color: #64748b; font-size: 10px;")
@@ -1207,9 +1221,9 @@ class MainWindow(QMainWindow):
                 if version_file.exists():
                     version_text = f"v{version_file.read_text().strip()}"
                 else:
-                    version_text = "v0.3.2"
+                    version_text = "v0.3.4"
             except Exception:
-                version_text = "v0.3.2"
+                version_text = "v0.3.4"
         
         version_label = QLabel(version_text)
         version_label.setStyleSheet("color: #64748b; font-size: 10px;")
@@ -1258,7 +1272,7 @@ class MainWindow(QMainWindow):
             """
             <h2>KinBench Tool</h2>
             <p>K&C (Kinematics & Compliance) Analysis Tool</p>
-            <p><b>Version:</b> 0.3.2</p>
+            <p><b>Version:</b> 0.3.3</p>
             <p><b>Description:</b></p>
             <p>This tool is designed for analyzing vehicle suspension systems.</p>
             <p>It supports Bump, Roll, and Static Load tests.</p>

@@ -40,7 +40,8 @@ class VehicleParamsPanel(QWidget):
         
         # 创建参数组
         params_group = QGroupBox("Vehicle Parameters")
-        params_group.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+        # 放大车辆参数区域标题字体
+        params_group.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
         params_layout = QGridLayout()
         params_layout.setSpacing(14)
         params_layout.setColumnStretch(0, 0)  # 标签列不拉伸
@@ -67,7 +68,8 @@ class VehicleParamsPanel(QWidget):
             # 标签 - 现代化样式，优化大小
             param_label = QLabel(f"{label}:")
             param_label.setMinimumWidth(130)
-            param_label.setFont(QFont("Segoe UI", 10))
+            # 放大参数标签字体
+            param_label.setFont(QFont("Segoe UI", 11))
             param_label.setStyleSheet("color: #475569; font-weight: 500; padding: 4px 0px;")
             params_layout.addWidget(param_label, row, 0)
             
@@ -79,7 +81,8 @@ class VehicleParamsPanel(QWidget):
             spinbox.setDecimals(2)
             spinbox.setSuffix(f" {unit}")
             spinbox.valueChanged.connect(self._on_param_changed)
-            spinbox.setFont(QFont("Segoe UI", 10))
+            # 放大输入框数字字体
+            spinbox.setFont(QFont("Segoe UI", 11))
             # 设置输入框最小宽度，确保能显示完整内容（包括单位）
             spinbox.setMinimumWidth(160)
             spinbox.setMinimumHeight(24)

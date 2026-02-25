@@ -9,7 +9,7 @@ from matplotlib.axes import Axes
 
 from .plot_utils import (
     setup_axes_style, plot_data_curve, plot_fit_line, plot_sample_points,
-    add_fit_formula_text, setup_legend, convert_matlab_color_to_python
+    add_fit_formula_text, setup_legend, convert_matlab_color_to_python, get_compare_style
 )
 from ..data import KCCalculator
 from ..utils.logger import get_logger
@@ -77,17 +77,28 @@ def plot_lateral_toe_compliance(ax_left: Axes,
     y_fit_left = np.polyval(coeffs_left, lateral_force_left_kn)
     y_fit_right = np.polyval(coeffs_right, lateral_force_right_kn)
     
-    # 转换颜色
-    curve_color = convert_matlab_color_to_python(curve_color) if curve_color else None
-    fit_color = convert_matlab_color_to_python(fit_color) if fit_color else None
+    # 如果compare_count > 0，使用对比样式（灰色曲线+蓝色拟合线）
+    if compare_count > 0:
+        compare_style = get_compare_style(compare_count)
+        curve_color = compare_style['curve_color']  # 灰色
+        fit_color = compare_style['fit_color']      # 蓝色
+        curve_linestyle = compare_style['curve_linestyle']
+        fit_linestyle = compare_style['fit_linestyle']
+    else:
+        # 转换颜色（仅当compare_count=0时）
+        curve_color = convert_matlab_color_to_python(curve_color) if curve_color else None
+        fit_color = convert_matlab_color_to_python(fit_color) if fit_color else None
+        curve_linestyle = '-'
+        fit_linestyle = '-'
     
     # 绘制左轮
     plot_data_curve(ax_left, lateral_force_left_kn, toe_left,
-                   label='Result', color=curve_color)
+                   label='Result', color=curve_color, linestyle=curve_linestyle)
     plot_fit_line(ax_left, lateral_force_left_kn, y_fit_left,
                  fit_range=(lateral_force_left_kn[fit_start_left], lateral_force_left_kn[fit_end_left-1]),
                  label=f'curve fitting [{-fit_range:.1f}kN, {fit_range:.1f}kN]',
-                 color=fit_color, markevery=(0, fit_end_left-fit_start_left-1))
+                 color=fit_color, markevery=(0, fit_end_left-fit_start_left-1),
+                 linestyle=fit_linestyle)
     
     if show_sample_points_left:
         plot_sample_points(ax_left, lateral_force_left_kn, toe_left,
@@ -101,11 +112,12 @@ def plot_lateral_toe_compliance(ax_left: Axes,
     
     # 绘制右轮
     plot_data_curve(ax_right, lateral_force_right_kn, toe_right,
-                   label='Result', color=curve_color)
+                   label='Result', color=curve_color, linestyle=curve_linestyle)
     plot_fit_line(ax_right, lateral_force_right_kn, y_fit_right,
                  fit_range=(lateral_force_right_kn[fit_start_right], lateral_force_right_kn[fit_end_right-1]),
                  label=f'curve fitting [{-fit_range:.1f}kN, {fit_range:.1f}kN]',
-                 color=fit_color, markevery=(0, fit_end_right-fit_start_right-1))
+                 color=fit_color, markevery=(0, fit_end_right-fit_start_right-1),
+                 linestyle=fit_linestyle)
     if show_sample_points_right:
         plot_sample_points(ax_right, lateral_force_right_kn, toe_right,
                           fit_start_right, fit_end_right, color=curve_color)
@@ -178,17 +190,28 @@ def plot_lateral_camber_compliance(ax_left: Axes,
     y_fit_left = np.polyval(coeffs_left, lateral_force_left_kn)
     y_fit_right = np.polyval(coeffs_right, lateral_force_right_kn)
     
-    # 转换颜色
-    curve_color = convert_matlab_color_to_python(curve_color) if curve_color else None
-    fit_color = convert_matlab_color_to_python(fit_color) if fit_color else None
+    # 如果compare_count > 0，使用对比样式（灰色曲线+蓝色拟合线）
+    if compare_count > 0:
+        compare_style = get_compare_style(compare_count)
+        curve_color = compare_style['curve_color']  # 灰色
+        fit_color = compare_style['fit_color']      # 蓝色
+        curve_linestyle = compare_style['curve_linestyle']
+        fit_linestyle = compare_style['fit_linestyle']
+    else:
+        # 转换颜色（仅当compare_count=0时）
+        curve_color = convert_matlab_color_to_python(curve_color) if curve_color else None
+        fit_color = convert_matlab_color_to_python(fit_color) if fit_color else None
+        curve_linestyle = '-'
+        fit_linestyle = '-'
     
     # 绘制左轮
     plot_data_curve(ax_left, lateral_force_left_kn, camber_left,
-                   label='Result', color=curve_color)
+                   label='Result', color=curve_color, linestyle=curve_linestyle)
     plot_fit_line(ax_left, lateral_force_left_kn, y_fit_left,
                  fit_range=(lateral_force_left_kn[fit_start_left], lateral_force_left_kn[fit_end_left-1]),
                  label=f'curve fitting [{-fit_range:.1f}kN, {fit_range:.1f}kN]',
-                 color=fit_color, markevery=(0, fit_end_left-fit_start_left-1))
+                 color=fit_color, markevery=(0, fit_end_left-fit_start_left-1),
+                 linestyle=fit_linestyle)
     if show_sample_points_left:
         plot_sample_points(ax_left, lateral_force_left_kn, camber_left,
                           fit_start_left, fit_end_left, color=curve_color)
@@ -202,11 +225,12 @@ def plot_lateral_camber_compliance(ax_left: Axes,
     
     # 绘制右轮
     plot_data_curve(ax_right, lateral_force_right_kn, camber_right,
-                   label='Result', color=curve_color)
+                   label='Result', color=curve_color, linestyle=curve_linestyle)
     plot_fit_line(ax_right, lateral_force_right_kn, y_fit_right,
                  fit_range=(lateral_force_right_kn[fit_start_right], lateral_force_right_kn[fit_end_right-1]),
                  label=f'curve fitting [{-fit_range:.1f}kN, {fit_range:.1f}kN]',
-                 color=fit_color, markevery=(0, fit_end_right-fit_start_right-1))
+                 color=fit_color, markevery=(0, fit_end_right-fit_start_right-1),
+                 linestyle=fit_linestyle)
     if show_sample_points_right:
         plot_sample_points(ax_right, lateral_force_right_kn, camber_right,
                           fit_start_right, fit_end_right, color=curve_color)
@@ -279,17 +303,28 @@ def plot_braking_toe_compliance(ax_left: Axes,
     y_fit_left = np.polyval(coeffs_left, braking_force_left_kn)
     y_fit_right = np.polyval(coeffs_right, braking_force_right_kn)
     
-    # 转换颜色
-    curve_color = convert_matlab_color_to_python(curve_color) if curve_color else None
-    fit_color = convert_matlab_color_to_python(fit_color) if fit_color else None
+    # 如果compare_count > 0，使用对比样式（灰色曲线+蓝色拟合线）
+    if compare_count > 0:
+        compare_style = get_compare_style(compare_count)
+        curve_color = compare_style['curve_color']  # 灰色
+        fit_color = compare_style['fit_color']      # 蓝色
+        curve_linestyle = compare_style['curve_linestyle']
+        fit_linestyle = compare_style['fit_linestyle']
+    else:
+        # 转换颜色（仅当compare_count=0时）
+        curve_color = convert_matlab_color_to_python(curve_color) if curve_color else None
+        fit_color = convert_matlab_color_to_python(fit_color) if fit_color else None
+        curve_linestyle = '-'
+        fit_linestyle = '-'
     
     # 绘制左轮
     plot_data_curve(ax_left, braking_force_left_kn, toe_left,
-                   label='Result', color=curve_color)
+                   label='Result', color=curve_color, linestyle=curve_linestyle)
     plot_fit_line(ax_left, braking_force_left_kn, y_fit_left,
                  fit_range=(braking_force_left_kn[fit_start_left], braking_force_left_kn[fit_end_left-1]),
                  label=f'curve fitting [{-fit_range:.1f}kN, {fit_range:.1f}kN]',
-                 color=fit_color, markevery=(0, fit_end_left-fit_start_left-1))
+                 color=fit_color, markevery=(0, fit_end_left-fit_start_left-1),
+                 linestyle=fit_linestyle)
     if show_sample_points_left:
         plot_sample_points(ax_left, braking_force_left_kn, toe_left,
                           fit_start_left, fit_end_left, color=curve_color)
@@ -303,11 +338,12 @@ def plot_braking_toe_compliance(ax_left: Axes,
     
     # 绘制右轮
     plot_data_curve(ax_right, braking_force_right_kn, toe_right,
-                   label='Result', color=curve_color)
+                   label='Result', color=curve_color, linestyle=curve_linestyle)
     plot_fit_line(ax_right, braking_force_right_kn, y_fit_right,
                  fit_range=(braking_force_right_kn[fit_start_right], braking_force_right_kn[fit_end_right-1]),
                  label=f'curve fitting [{-fit_range:.1f}kN, {fit_range:.1f}kN]',
-                 color=fit_color, markevery=(0, fit_end_right-fit_start_right-1))
+                 color=fit_color, markevery=(0, fit_end_right-fit_start_right-1),
+                 linestyle=fit_linestyle)
     if show_sample_points_right:
         plot_sample_points(ax_right, braking_force_right_kn, toe_right,
                           fit_start_right, fit_end_right, color=curve_color)
@@ -380,17 +416,28 @@ def plot_acceleration_toe_compliance(ax_left: Axes,
     y_fit_left = np.polyval(coeffs_left, acceleration_force_left_kn)
     y_fit_right = np.polyval(coeffs_right, acceleration_force_right_kn)
     
-    # 转换颜色
-    curve_color = convert_matlab_color_to_python(curve_color) if curve_color else None
-    fit_color = convert_matlab_color_to_python(fit_color) if fit_color else None
+    # 如果compare_count > 0，使用对比样式（灰色曲线+蓝色拟合线）
+    if compare_count > 0:
+        compare_style = get_compare_style(compare_count)
+        curve_color = compare_style['curve_color']  # 灰色
+        fit_color = compare_style['fit_color']      # 蓝色
+        curve_linestyle = compare_style['curve_linestyle']
+        fit_linestyle = compare_style['fit_linestyle']
+    else:
+        # 转换颜色（仅当compare_count=0时）
+        curve_color = convert_matlab_color_to_python(curve_color) if curve_color else None
+        fit_color = convert_matlab_color_to_python(fit_color) if fit_color else None
+        curve_linestyle = '-'
+        fit_linestyle = '-'
     
     # 绘制左轮
     plot_data_curve(ax_left, acceleration_force_left_kn, toe_left,
-                   label='Result', color=curve_color)
+                   label='Result', color=curve_color, linestyle=curve_linestyle)
     plot_fit_line(ax_left, acceleration_force_left_kn, y_fit_left,
                  fit_range=(acceleration_force_left_kn[fit_start_left], acceleration_force_left_kn[fit_end_left-1]),
                  label=f'curve fitting [{-fit_range:.1f}kN, {fit_range:.1f}kN]',
-                 color=fit_color, markevery=(0, fit_end_left-fit_start_left-1))
+                 color=fit_color, markevery=(0, fit_end_left-fit_start_left-1),
+                 linestyle=fit_linestyle)
     if show_sample_points_left:
         plot_sample_points(ax_left, acceleration_force_left_kn, toe_left,
                           fit_start_left, fit_end_left, color=curve_color)
@@ -404,11 +451,12 @@ def plot_acceleration_toe_compliance(ax_left: Axes,
     
     # 绘制右轮
     plot_data_curve(ax_right, acceleration_force_right_kn, toe_right,
-                   label='Result', color=curve_color)
+                   label='Result', color=curve_color, linestyle=curve_linestyle)
     plot_fit_line(ax_right, acceleration_force_right_kn, y_fit_right,
                  fit_range=(acceleration_force_right_kn[fit_start_right], acceleration_force_right_kn[fit_end_right-1]),
                  label=f'curve fitting [{-fit_range:.1f}kN, {fit_range:.1f}kN]',
-                 color=fit_color, markevery=(0, fit_end_right-fit_start_right-1))
+                 color=fit_color, markevery=(0, fit_end_right-fit_start_right-1),
+                 linestyle=fit_linestyle)
     if show_sample_points_right:
         plot_sample_points(ax_right, acceleration_force_right_kn, toe_right,
                           fit_start_right, fit_end_right, color=curve_color)

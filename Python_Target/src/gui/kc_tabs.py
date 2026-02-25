@@ -5,18 +5,24 @@
 
 from typing import Optional, Dict, Any
 from pathlib import Path
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-                            QPushButton, QLineEdit, QTabWidget, QGroupBox,
-                            QGridLayout, QDoubleSpinBox, QSpinBox, QColorDialog,
-                            QMessageBox, QFileDialog, QTextEdit, QScrollArea,
-                            QProgressDialog, QButtonGroup, QSlider, QComboBox, QCheckBox, QSizePolicy)
-from PyQt6.QtCore import Qt, pyqtSignal, QThread, pyqtSlot
-from PyQt6.QtGui import QFont, QColor, QPixmap
+import io
+import os
+
+from PyQt6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+    QPushButton, QLineEdit, QTabWidget, QGroupBox,
+    QGridLayout, QDoubleSpinBox, QSpinBox, QColorDialog,
+    QMessageBox, QFileDialog, QTextEdit, QScrollArea,
+    QProgressDialog, QButtonGroup, QSlider, QComboBox,
+    QCheckBox, QSizePolicy
+)
+from PyQt6.QtCore import Qt, pyqtSignal, QThread, pyqtSlot, QSize, QBuffer, QByteArray
+from PyQt6.QtGui import QFont, QColor, QPixmap, QIcon
 
 from .plot_widgets import ComparisonPlotWidget, MatplotlibWidget
 from ..data import ResParser, DataExtractor, KCCalculator
 from ..plot import (
-    plot_bump_steer, plot_bump_camber, plot_wheel_rate,
+    plot_bump_steer, plot_bump_camber, plot_wheel_rate_slope, plot_wheel_rate_wc,
     plot_wheel_recession, plot_track_change,
     plot_bump_caster, plot_bump_side_swing_arm_angle,
     plot_bump_side_swing_arm_length, plot_bump_wheel_load,
@@ -166,6 +172,52 @@ class BaseTestTab(QWidget):
         file_group.setLayout(file_layout)
         layout.addWidget(file_group)
     
+    def style_plot_tabs(self, tab_widget: QTabWidget) -> None:
+        """为右侧结果图表的TabWidget应用统一的现代化样式
+        
+        设计目标：
+        - 外观上与主窗口顶部的大工况标签（Bump / Roll Test 等）保持“家族化”风格：圆角、半透明、柔和边界；
+        - 但使用不同的配色（偏冷色、低饱和度灰蓝），与大工况标签区分开来；
+        - 轻微的左右间隔，让每个结果Tab（如Bump Steer、Bump Camber等）之间有一点呼吸感。
+        """
+        if not isinstance(tab_widget, QTabWidget):
+            return
+        
+        tab_widget.setStyleSheet("""
+            QTabWidget::pane {
+                border: 1px solid rgba(148, 163, 184, 0.4);
+                border-radius: 10px;
+                background-color: rgba(255, 255, 255, 0.94);
+                top: -1px;
+            }
+            
+            QTabBar::tab {
+                background-color: rgba(226, 232, 240, 0.9);
+                color: #0f172a;
+                padding: 4px 12px;
+                margin-right: 6px;              /* 邻接结果标签之间留一点间隔 */
+                border-top-left-radius: 7px;
+                border-top-right-radius: 7px;
+                border: 1px solid transparent;
+                font-size: 11px;
+                font-weight: 500;
+                min-width: 90px;
+                min-height: 22px;
+            }
+            
+            QTabBar::tab:selected {
+                background-color: #e0f2fe;      /* 选中Tab偏蓝色高亮 */
+                color: #0369a1;
+                border-color: rgba(59, 130, 246, 0.7);
+                font-weight: 600;
+            }
+            
+            QTabBar::tab:hover:!selected {
+                background-color: #f1f5f9;
+                color: #0f172a;
+            }
+        """)
+    
     def create_fit_range_slider(self, min_val: float, max_val: float, default_val: float, 
                                  step: float = 1.0, unit: str = "", is_int: bool = False) -> tuple:
         """创建漂亮的fit range滑块控件
@@ -305,8 +357,11 @@ class BaseTestTab(QWidget):
         grid_layout.setColumnStretch(0, 0)
         grid_layout.setColumnStretch(1, 1)
         
+        # 结果显示控件与字段说明
         self.result_labels = {}
         self.result_rows = []  # 存储每个结果项的行容器，用于控制显示/隐藏
+        # key -> 人类可读名称，用于导出到Excel
+        self.result_field_labels = {}
         
         row = 0
         for key, label in result_fields:
@@ -334,6 +389,7 @@ class BaseTestTab(QWidget):
                 max-height: 28px;
             """)
             self.result_labels[key] = value_label
+            self.result_field_labels[key] = label
             result_row_layout.addWidget(value_label, 0, 1)
             
             result_row_container.setLayout(result_row_layout)
@@ -413,7 +469,230 @@ class BaseTestTab(QWidget):
                 self.result_rows[i].setVisible(True)
             if self.expand_results_btn:
                 self.expand_results_btn.setText("▲")
-    
+
+    def _get_resources_dir(self) -> Optional[Path]:
+        """获取Resources目录路径（用于加载图标等资源）"""
+        try:
+            base = Path(__file__).resolve()
+            for _ in range(5):
+                candidate = base / "Resources"
+                if candidate.exists():
+                    return candidate
+                base = base.parent
+        except Exception:
+            return None
+        return None
+
+    def export_plots_to_ppt(self):
+        """将当前工况下右侧所有Plot Tab中的图像，一键导出到PPT（每页两个Plot）"""
+        try:
+            from pptx import Presentation  # type: ignore
+            from pptx.util import Inches  # type: ignore
+        except ImportError:
+            QMessageBox.warning(
+                self,
+                "导出失败",
+                "缺少依赖库 python-pptx。\n\n请在环境中执行：\n    pip install python-pptx"
+            )
+            return
+
+        if not hasattr(self, "plot_tabs") or not isinstance(self.plot_tabs, QTabWidget):
+            QMessageBox.information(self, "无图表", "当前工况页面尚未创建图表区域，无法导出。")
+            return
+
+        # 询问用户保存位置
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            "保存当前工况所有图表到PPT",
+            "",
+            "PowerPoint 文件 (*.pptx)"
+        )
+        if not filename:
+            return
+        if not filename.lower().endswith(".pptx"):
+            filename += ".pptx"
+
+        # PPT 导出清晰度（仅控制 matplotlib 保存时的 DPI），不再强制所有图片变成正方形，
+        # 以避免任何拉伸 / 压缩失真，完全按照原始宽高比导出。
+        DPI = 200  # 导出 DPI
+
+        # 针对每一个结果Tab单独生成一页PPT：
+        # - 若为 ComparisonPlotWidget，则直接从左右两个 matplotlib figure 导出PNG，避免工具栏和按钮
+        # - 其他Widget则退化为整体截图
+        prs = Presentation()
+        blank_layout = prs.slide_layouts[6]  # 空白页
+
+        slide_count = 0
+        for i in range(self.plot_tabs.count()):
+            widget = self.plot_tabs.widget(i)
+            if widget is None:
+                continue
+
+            title_text = self.plot_tabs.tabText(i)
+
+            images_bytes = []
+            # 优先处理 ComparisonPlotWidget，只导出真正的绘图区域（保持原始宽高比）
+            if isinstance(widget, ComparisonPlotWidget):
+                try:
+                    # 左图：直接按当前显示状态保存为 PNG，不修改坐标轴纵横比
+                    buf_left = io.BytesIO()
+                    fig_left = widget.figure_left
+                    fig_left.savefig(
+                        buf_left,
+                        format="png",
+                        dpi=DPI,
+                        bbox_inches="tight",
+                        facecolor='white',
+                        edgecolor='none',
+                        pad_inches=0.1,  # 添加少量边距，避免内容被裁剪
+                    )
+                    buf_left.seek(0)
+                    images_bytes.append(buf_left.getvalue())
+
+                    # 右图：同样按当前显示状态保存为 PNG
+                    buf_right = io.BytesIO()
+                    fig_right = widget.figure_right
+                    fig_right.savefig(
+                        buf_right,
+                        format="png",
+                        dpi=DPI,
+                        bbox_inches="tight",
+                        facecolor='white',
+                        edgecolor='none',
+                        pad_inches=0.1,
+                    )
+                    buf_right.seek(0)
+                    images_bytes.append(buf_right.getvalue())
+                except Exception as e:
+                    logger.warning(f"从 ComparisonPlotWidget 导出图像失败: {e}", exc_info=True)
+                    images_bytes = []
+
+            # 兜底：对非 ComparisonPlotWidget 或前面失败的情况，抓取整个Widget截图
+            if not images_bytes:
+                pixmap = widget.grab()
+                if pixmap.isNull():
+                    continue
+
+                ba = QByteArray()
+                buffer = QBuffer(ba)
+                buffer.open(QBuffer.OpenModeFlag.WriteOnly)
+                pixmap.save(buffer, "PNG")
+                buffer.close()
+                images_bytes.append(bytes(ba))
+
+            if not images_bytes:
+                continue
+
+            slide = prs.slides.add_slide(blank_layout)
+            slide_count += 1
+
+            # 顶部添加标题（当前结果Tab的标题）
+            title_box = slide.shapes.add_textbox(
+                Inches(0.5),
+                Inches(0.3),
+                width=Inches(9.0),
+                height=Inches(0.6),
+            )
+            title_box.text = title_text
+
+            # 每个结果Tab：一页最多两个图（左/右），保持原始宽高比，不再强制拉伸为正方形。
+            # 规则：
+            # - 只有一张图时：按宽度 9 英寸等比例缩放，水平居中；
+            # - 有两张图时：每张图宽度约 4.5 英寸，左右排列，高度由宽高比自动决定。
+            if len(images_bytes) == 1:
+                # 只有一张图：等比例缩放，按宽度 9 英寸，保持原始纵横比
+                img_stream = io.BytesIO(images_bytes[0])
+                slide.shapes.add_picture(
+                    img_stream,
+                    Inches(0.5),
+                    Inches(1.2),
+                    width=Inches(9.0),  # 只指定宽度，让 PPT 自动保持纵横比
+                )
+            else:
+                # 左图：宽度约 4.5 英寸
+                left_img = io.BytesIO(images_bytes[0])
+                slide.shapes.add_picture(
+                    left_img,
+                    Inches(0.5),
+                    Inches(1.2),
+                    width=Inches(4.5),
+                )
+                
+                # 右图：宽度约 4.5 英寸
+                right_img = io.BytesIO(images_bytes[1])
+                slide.shapes.add_picture(
+                    right_img,
+                    Inches(5.0),
+                    Inches(1.2),
+                    width=Inches(4.5),
+                )
+
+        if slide_count == 0:
+            QMessageBox.information(self, "无图表", "当前工况没有可导出的图表。")
+            return
+
+        try:
+            prs.save(filename)
+            QMessageBox.information(self, "导出完成", f"已将当前工况所有图表导出到：\n{filename}")
+        except Exception as e:
+            QMessageBox.critical(self, "保存失败", f"保存PPT文件失败：\n{e}")
+
+    def export_current_tab_to_ppt(self):
+        """兼容旧接口：导出当前工况所有图表到PPT。
+
+        一些按钮（如对比区域的小图标）仍然连接到 `export_current_tab_to_ppt`，
+        这里简单地转发到统一实现 `export_plots_to_ppt`。
+        """
+        self.export_plots_to_ppt()
+
+    def export_results_to_excel(self):
+        """将左侧Results面板中的结果数据一键导出到Excel"""
+        try:
+            from openpyxl import Workbook  # type: ignore
+        except ImportError:
+            QMessageBox.warning(
+                self,
+                "导出失败",
+                "缺少依赖库 openpyxl。\n\n请在环境中执行：\n    pip install openpyxl"
+            )
+            return
+
+        if not hasattr(self, "result_labels") or not isinstance(self.result_labels, dict):
+            QMessageBox.information(self, "无结果", "当前工况页面没有可导出的结果数据。")
+            return
+
+        # 询问保存位置
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            "保存Results结果到Excel",
+            "",
+            "Excel 文件 (*.xlsx)"
+        )
+        if not filename:
+            return
+        if not filename.lower().endswith(".xlsx"):
+            filename += ".xlsx"
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Results"
+
+        # 表头
+        ws.append(["Key", "Description", "Value"])
+
+        # 按添加顺序导出
+        field_labels = getattr(self, "result_field_labels", {}) or {}
+        for key, label_widget in self.result_labels.items():
+            desc = field_labels.get(key, "")
+            value = label_widget.text().strip()
+            ws.append([key, desc, value])
+
+        try:
+            wb.save(filename)
+            QMessageBox.information(self, "导出完成", f"已将Results结果导出到：\n{filename}")
+        except Exception as e:
+            QMessageBox.critical(self, "保存失败", f"保存Excel文件失败：\n{e}")
+
     def setup_comparison_files(self, layout: QVBoxLayout):
         """设置多文件导入比较功能
         
@@ -538,9 +817,130 @@ class BaseTestTab(QWidget):
                 'file_path': None,
                 'loaded': False
             })
-            
+
             compare_layout.addLayout(row_layout)
-        
+
+        # 在 Compare Results 下方添加导出和预留功能的小方块按钮行
+        button_row = QHBoxLayout()
+        button_row.setSpacing(8)
+
+        # 导出图表到 PPT 按钮（使用 Icon 文件夹中的 PowerPoint 图标，正方形按钮）
+        self.btn_export_ppt = QPushButton()
+        self.btn_export_ppt.setToolTip("导出当前工况所有图表到 PPT")
+        try:
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+            ppt_icon_path = os.path.join(project_root, "Icon", "PowerPoint.png")
+            if os.path.exists(ppt_icon_path):
+                self.btn_export_ppt.setIcon(QIcon(ppt_icon_path))
+        except Exception:
+            pass
+        self.btn_export_ppt.setFixedSize(32, 32)
+        self.btn_export_ppt.setIconSize(QSize(24, 24))
+        self.btn_export_ppt.setStyleSheet("""
+            QPushButton {
+                background-color: #f8fafc;
+                border: 1px solid #cbd5e1;
+                border-radius: 6px;
+            }
+            QPushButton:hover:enabled {
+                background-color: #e2e8f0;
+                border-color: #94a3b8;
+            }
+            QPushButton:pressed:enabled {
+                background-color: #cbd5e1;
+            }
+        """)
+        self.btn_export_ppt.clicked.connect(self.export_current_tab_to_ppt)
+        button_row.addWidget(self.btn_export_ppt)
+
+        # 导出结果到 Excel 按钮（使用 Icon 文件夹中的 excel 图标，正方形按钮）
+        self.btn_export_excel = QPushButton()
+        self.btn_export_excel.setToolTip("导出 Results 结果到 Excel")
+        try:
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+            excel_icon_path = os.path.join(project_root, "Icon", "excel.png")
+            if os.path.exists(excel_icon_path):
+                self.btn_export_excel.setIcon(QIcon(excel_icon_path))
+        except Exception:
+            pass
+        self.btn_export_excel.setFixedSize(32, 32)
+        self.btn_export_excel.setIconSize(QSize(24, 24))
+        self.btn_export_excel.setStyleSheet("""
+            QPushButton {
+                background-color: #f8fafc;
+                border: 1px solid #cbd5e1;
+                border-radius: 6px;
+            }
+            QPushButton:hover:enabled {
+                background-color: #e2e8f0;
+                border-color: #94a3b8;
+            }
+            QPushButton:pressed:enabled {
+                background-color: #cbd5e1;
+            }
+        """)
+        self.btn_export_excel.clicked.connect(self.export_results_to_excel)
+        button_row.addWidget(self.btn_export_excel)
+
+        # 预留按钮3（使用 Icon 文件夹中的 Button_3 图标，正方形按钮）
+        self.btn_custom_3 = QPushButton()
+        self.btn_custom_3.setToolTip("预留功能 3")
+        try:
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+            btn3_icon_path = os.path.join(project_root, "Icon", "Button_3.png")
+            if os.path.exists(btn3_icon_path):
+                self.btn_custom_3.setIcon(QIcon(btn3_icon_path))
+        except Exception:
+            pass
+        self.btn_custom_3.setFixedSize(32, 32)
+        self.btn_custom_3.setIconSize(QSize(24, 24))
+        self.btn_custom_3.setStyleSheet("""
+            QPushButton {
+                background-color: #f8fafc;
+                border: 1px solid #cbd5e1;
+                border-radius: 6px;
+            }
+            QPushButton:hover:enabled {
+                background-color: #e2e8f0;
+                border-color: #94a3b8;
+            }
+            QPushButton:pressed:enabled {
+                background-color: #cbd5e1;
+            }
+        """)
+        button_row.addWidget(self.btn_custom_3)
+
+        # 预留按钮4（使用 Icon 文件夹中的 Button_4 图标，正方形按钮）
+        self.btn_custom_4 = QPushButton()
+        self.btn_custom_4.setToolTip("预留功能 4")
+        try:
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+            btn4_icon_path = os.path.join(project_root, "Icon", "Button_4.png")
+            if os.path.exists(btn4_icon_path):
+                self.btn_custom_4.setIcon(QIcon(btn4_icon_path))
+        except Exception:
+            pass
+        self.btn_custom_4.setFixedSize(32, 32)
+        self.btn_custom_4.setIconSize(QSize(24, 24))
+        self.btn_custom_4.setStyleSheet("""
+            QPushButton {
+                background-color: #f8fafc;
+                border: 1px solid #cbd5e1;
+                border-radius: 6px;
+            }
+            QPushButton:hover:enabled {
+                background-color: #e2e8f0;
+                border-color: #94a3b8;
+            }
+            QPushButton:pressed:enabled {
+                background-color: #cbd5e1;
+            }
+        """)
+        button_row.addWidget(self.btn_custom_4)
+
+        # 将按钮行添加到 Compare Results 组中
+        compare_layout.addLayout(button_row)
+
         compare_group.setLayout(compare_layout)
         layout.addWidget(compare_group)
     
@@ -1114,21 +1514,21 @@ class StartInfoTab(QWidget):
         author_layout.setContentsMargins(16, 16, 16, 16)
         author_layout.setSpacing(12)
         
-        # 作者标题
+        # 作者标题（适当放大字号）
         author_title = QLabel("Author Information")
-        author_title.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
+        author_title.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
         author_title.setStyleSheet("color: #1e293b;")
         author_layout.addWidget(author_title)
         
         # 作者名字
         author_name = QLabel("Quan Rong")
-        author_name.setFont(QFont("Segoe UI", 12, QFont.Weight.Normal))
+        author_name.setFont(QFont("Segoe UI", 14, QFont.Weight.Normal))
         author_name.setStyleSheet("color: #334155;")
         author_layout.addWidget(author_name)
         
         # 作者邮箱
         author_email = QLabel("quan.rong@de.gestamp.com")
-        author_email.setFont(QFont("Segoe UI", 11, QFont.Weight.Normal))
+        author_email.setFont(QFont("Segoe UI", 13, QFont.Weight.Normal))
         author_email.setStyleSheet("color: #475569;")
         author_layout.addWidget(author_email)
         
@@ -1441,9 +1841,11 @@ class BumpTestTab(BaseTestTab):
         right_layout = QVBoxLayout()
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(14)
-        
+
         # 图表Tab组
         self.plot_tabs = QTabWidget()
+        # 使用统一的结果Tab样式（与主工况Tab风格类似但配色不同）
+        self.style_plot_tabs(self.plot_tabs)
         
         # Bump Steer图表
         self.bump_steer_widget = ComparisonPlotWidget()
@@ -1453,9 +1855,13 @@ class BumpTestTab(BaseTestTab):
         self.bump_camber_widget = ComparisonPlotWidget()
         self.plot_tabs.addTab(self.bump_camber_widget, "Bump Camber")
         
-        # Wheel Rate图表
-        self.wheel_rate_widget = ComparisonPlotWidget()
-        self.plot_tabs.addTab(self.wheel_rate_widget, "Wheel Rate")
+        # Wheel Rate Slope@WC图表
+        self.wheel_rate_slope_widget = ComparisonPlotWidget()
+        self.plot_tabs.addTab(self.wheel_rate_slope_widget, "Wheel Rate Slope@WC")
+        
+        # Wheel Rate@WC图表
+        self.wheel_rate_wc_widget = ComparisonPlotWidget()
+        self.plot_tabs.addTab(self.wheel_rate_wc_widget, "Wheel Rate@WC")
         
         # Wheel Recession图表
         self.wheel_recession_widget = ComparisonPlotWidget()
@@ -1482,9 +1888,9 @@ class BumpTestTab(BaseTestTab):
         self.plot_tabs.addTab(self.wheel_load_widget, "Wheel Load")
         
         # 连接样本点显示按钮的replot信号
-        for w in (self.bump_steer_widget, self.bump_camber_widget, self.wheel_rate_widget,
-                  self.wheel_recession_widget, self.track_change_widget, self.caster_widget,
-                  self.swa_angle_widget, self.swa_length_widget, self.wheel_load_widget):
+        for w in (self.bump_steer_widget, self.bump_camber_widget, self.wheel_rate_slope_widget,
+                  self.wheel_rate_wc_widget, self.wheel_recession_widget, self.track_change_widget,
+                  self.caster_widget, self.swa_angle_widget, self.swa_length_widget, self.wheel_load_widget):
             w.replot_requested.connect(self.update_plots)
         
         right_layout.addWidget(self.plot_tabs)
@@ -1625,7 +2031,8 @@ class BumpTestTab(BaseTestTab):
         # 清空所有图表
         self.bump_steer_widget.clear()
         self.bump_camber_widget.clear()
-        self.wheel_rate_widget.clear()
+        self.wheel_rate_slope_widget.clear()
+        self.wheel_rate_wc_widget.clear()
         self.wheel_recession_widget.clear()
         self.track_change_widget.clear()
         self.caster_widget.clear()
@@ -1659,15 +2066,27 @@ class BumpTestTab(BaseTestTab):
                     show_sample_points_left=self.bump_camber_widget.show_sample_points_left,
                     show_sample_points_right=self.bump_camber_widget.show_sample_points_right
                 )
-                plot_wheel_rate(
-                    self.wheel_rate_widget.get_axes_left(),
-                    self.wheel_rate_widget.get_axes_right(),
+                plot_wheel_rate_slope(
+                    self.wheel_rate_slope_widget.get_axes_left(),
+                    self.wheel_rate_slope_widget.get_axes_right(),
                     self.calculator,
+                    fit_range=self.fit_range,
                     curve_color=self.curve_color,
                     fit_color=self.fit_color,
                     compare_count=0,
-                    show_sample_points_left=self.wheel_rate_widget.show_sample_points_left,
-                    show_sample_points_right=self.wheel_rate_widget.show_sample_points_right
+                    show_sample_points_left=self.wheel_rate_slope_widget.show_sample_points_left,
+                    show_sample_points_right=self.wheel_rate_slope_widget.show_sample_points_right
+                )
+                plot_wheel_rate_wc(
+                    self.wheel_rate_wc_widget.get_axes_left(),
+                    self.wheel_rate_wc_widget.get_axes_right(),
+                    self.calculator,
+                    fit_range=self.fit_range,
+                    curve_color=self.curve_color,
+                    fit_color=self.fit_color,
+                    compare_count=0,
+                    show_sample_points_left=self.wheel_rate_wc_widget.show_sample_points_left,
+                    show_sample_points_right=self.wheel_rate_wc_widget.show_sample_points_right
                 )
                 plot_wheel_recession(
                     self.wheel_recession_widget.get_axes_left(),
@@ -1769,15 +2188,27 @@ class BumpTestTab(BaseTestTab):
                             show_sample_points_left=self.bump_camber_widget.show_sample_points_left,
                             show_sample_points_right=self.bump_camber_widget.show_sample_points_right
                         )
-                        plot_wheel_rate(
-                            self.wheel_rate_widget.get_axes_left(),
-                            self.wheel_rate_widget.get_axes_right(),
+                        plot_wheel_rate_slope(
+                            self.wheel_rate_slope_widget.get_axes_left(),
+                            self.wheel_rate_slope_widget.get_axes_right(),
                             calculator,
+                            fit_range=self.fit_range,
                             curve_color=None,
                             fit_color=None,
                             compare_count=idx + 1,
-                            show_sample_points_left=self.wheel_rate_widget.show_sample_points_left,
-                            show_sample_points_right=self.wheel_rate_widget.show_sample_points_right
+                            show_sample_points_left=self.wheel_rate_slope_widget.show_sample_points_left,
+                            show_sample_points_right=self.wheel_rate_slope_widget.show_sample_points_right
+                        )
+                        plot_wheel_rate_wc(
+                            self.wheel_rate_wc_widget.get_axes_left(),
+                            self.wheel_rate_wc_widget.get_axes_right(),
+                            calculator,
+                            fit_range=self.fit_range,
+                            curve_color=None,
+                            fit_color=None,
+                            compare_count=idx + 1,
+                            show_sample_points_left=self.wheel_rate_wc_widget.show_sample_points_left,
+                            show_sample_points_right=self.wheel_rate_wc_widget.show_sample_points_right
                         )
                         plot_wheel_recession(
                             self.wheel_recession_widget.get_axes_left(),
@@ -1851,7 +2282,8 @@ class BumpTestTab(BaseTestTab):
         # 刷新所有图表
         self.bump_steer_widget.draw()
         self.bump_camber_widget.draw()
-        self.wheel_rate_widget.draw()
+        self.wheel_rate_slope_widget.draw()
+        self.wheel_rate_wc_widget.draw()
         self.wheel_recession_widget.draw()
         self.track_change_widget.draw()
         self.caster_widget.draw()
@@ -1863,9 +2295,9 @@ class BumpTestTab(BaseTestTab):
         has_data = bool(self.results_history or self.calculator or
                        (hasattr(self, 'compare_file_widgets') and
                         any(w.get('loaded') for w in self.compare_file_widgets)))
-        for w in (self.bump_steer_widget, self.bump_camber_widget, self.wheel_rate_widget,
-                  self.wheel_recession_widget, self.track_change_widget, self.caster_widget,
-                  self.swa_angle_widget, self.swa_length_widget, self.wheel_load_widget):
+        for w in (self.bump_steer_widget, self.bump_camber_widget, self.wheel_rate_slope_widget,
+                  self.wheel_rate_wc_widget, self.wheel_recession_widget, self.track_change_widget,
+                  self.caster_widget, self.swa_angle_widget, self.swa_length_widget, self.wheel_load_widget):
             w.set_sample_points_button_enabled(has_data)
     
     def process_data_for_comparison(self, calculator: KCCalculator) -> Optional[Dict[str, Any]]:
@@ -1901,7 +2333,8 @@ class BumpTestTab(BaseTestTab):
         """清空所有图表"""
         self.bump_steer_widget.clear()
         self.bump_camber_widget.clear()
-        self.wheel_rate_widget.clear()
+        self.wheel_rate_slope_widget.clear()
+        self.wheel_rate_wc_widget.clear()
         self.wheel_recession_widget.clear()
         self.track_change_widget.clear()
     
@@ -1981,9 +2414,11 @@ class RollTestTab(BaseTestTab):
         right_layout = QVBoxLayout()
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(14)
-        
+
         # 图表Tab组
         self.plot_tabs = QTabWidget()
+        # 使用统一的结果Tab样式
+        self.style_plot_tabs(self.plot_tabs)
         
         # Roll Steer图表
         self.roll_steer_widget = ComparisonPlotWidget()
@@ -2268,9 +2703,11 @@ class StaticLoadLateralTab(BaseTestTab):
         right_layout = QVBoxLayout()
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(14)
-        
+
         # 图表Tab组
         self.plot_tabs = QTabWidget()
+        # 使用统一的结果Tab样式
+        self.style_plot_tabs(self.plot_tabs)
         
         # Lateral Toe Compliance图表
         self.lateral_toe_widget = ComparisonPlotWidget()
@@ -2444,9 +2881,11 @@ class StaticLoadBrakingTab(BaseTestTab):
         right_layout = QVBoxLayout()
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(14)
-        
+
         # 图表Tab组
         self.plot_tabs = QTabWidget()
+        # 使用统一的结果Tab样式
+        self.style_plot_tabs(self.plot_tabs)
         
         # Braking Toe Compliance图表
         self.braking_toe_widget = ComparisonPlotWidget()
@@ -2591,6 +3030,8 @@ class StaticLoadAccelerationTab(BaseTestTab):
         
         # 图表Tab组
         self.plot_tabs = QTabWidget()
+        # 使用统一的结果Tab样式
+        self.style_plot_tabs(self.plot_tabs)
         
         # Acceleration Toe Compliance图表
         self.acceleration_toe_widget = ComparisonPlotWidget()

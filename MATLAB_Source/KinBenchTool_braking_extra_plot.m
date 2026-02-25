@@ -38,7 +38,9 @@ fidin=fopen(filedir);
 
 % 预设指针及其它参数
 RowNo=0;
-expression = '\d*';
+% Extract ONLY the numeric value inside `id="..."` from XML `<Component .../>` lines.
+% IDs are file-dependent and can differ between *.res results.
+expression = '(?<=id=")\d+(?=")';
 Flag=1;
 No_Row=0; % 记录当前文件行数
 

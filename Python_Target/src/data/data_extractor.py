@@ -126,42 +126,55 @@ class DataExtractor:
     def extract_wheel_travel_left_right(self, convert_length: bool = False) -> tuple:
         """提取左右轮的wheel_travel数据
         
-        在bump测试中，左右轮的wheel_travel应该相同（都使用wheel_travel_ID(1)的数据）
+        与MATLAB中Susp_parallel_travel_plot_data1的第17/18列保持一致：
+        - 使用wheel_travel_ID(1)作为左轮
+        - 使用wheel_travel_ID(2)作为右轮
+        - 如果只有一个ID，则左右轮公用同一列
         
         Args:
             convert_length: 是否将长度从毫米转换为米
             
         Returns:
-            (wheel_travel_left, wheel_travel_right): 左右轮的wheel_travel数据（相同）
+            (wheel_travel_left, wheel_travel_right): 左右轮的wheel_travel数据（一维数组，单位m或mm）
         """
         wheel_travel_ids = self.parser.get_param_id('wheel_travel')
-        if isinstance(wheel_travel_ids, list) and len(wheel_travel_ids) >= 1:
-            # 左右轮都使用第一个ID的数据（wheel_travel_ID(1)）
-            wheel_travel_data = self.extract_by_id(wheel_travel_ids[0], convert_length=convert_length)
-            # 确保是一维数组
-            if wheel_travel_data.ndim > 1:
-                # 如果是多维的，取vertical分量（第二列）
-                wheel_travel_data = wheel_travel_data[:, 1] if wheel_travel_data.shape[1] > 1 else wheel_travel_data[:, 0]
-            if wheel_travel_data.ndim > 1:
-                wheel_travel_data = wheel_travel_data.flatten()
-            # 左右轮使用相同的数据
-            wheel_travel_left = wheel_travel_data
-            wheel_travel_right = wheel_travel_data
+
+        # 常用情况：存在左右两个ID
+        if isinstance(wheel_travel_ids, (list, tuple)) and len(wheel_travel_ids) >= 2:
+            left_data = self.extract_by_id(wheel_travel_ids[0], convert_length=convert_length)
+            right_data = self.extract_by_id(wheel_travel_ids[1], convert_length=convert_length)
+
+            # 处理多维数据：通常[base, vertical, track]，这里按MATLAB逻辑取vertical分量（第二列）
+            if left_data.ndim > 1:
+                left_data = left_data[:, 1] if left_data.shape[1] > 1 else left_data[:, 0]
+            if right_data.ndim > 1:
+                right_data = right_data[:, 1] if right_data.shape[1] > 1 else right_data[:, 0]
+
+            # 保证是一维
+            if left_data.ndim > 1:
+                left_data = left_data.flatten()
+            if right_data.ndim > 1:
+                right_data = right_data.flatten()
+
+            wheel_travel_left = left_data
+            wheel_travel_right = right_data
+
         else:
-            # 如果只有一个ID，则左右轮使用相同的数据
-            wheel_travel_data = self.extract_by_name('wheel_travel', convert_length=convert_length)
-            if wheel_travel_data.ndim > 1:
-                # 如果是多维的，取vertical分量（第二列）
-                wheel_travel_left = wheel_travel_data[:, 1] if wheel_travel_data.shape[1] > 1 else wheel_travel_data[:, 0]
-                wheel_travel_right = wheel_travel_left  # 左右轮相同
+            # 退化情况：只有一个ID，或get_param_id返回单个int
+            if isinstance(wheel_travel_ids, (list, tuple)) and len(wheel_travel_ids) == 1:
+                base_data = self.extract_by_id(wheel_travel_ids[0], convert_length=convert_length)
             else:
-                wheel_travel_left = wheel_travel_data
-                wheel_travel_right = wheel_travel_data
-            
-            # 确保是一维数组
-            if wheel_travel_left.ndim > 1:
-                wheel_travel_left = wheel_travel_left.flatten()
-            if wheel_travel_right.ndim > 1:
-                wheel_travel_right = wheel_travel_right.flatten()
-        
+                # 直接通过名称获取
+                base_data = self.extract_by_name('wheel_travel', convert_length=convert_length)
+
+            if base_data.ndim > 1:
+                # 如果是多维的，取vertical分量（第二列）
+                base_data = base_data[:, 1] if base_data.shape[1] > 1 else base_data[:, 0]
+
+            if base_data.ndim > 1:
+                base_data = base_data.flatten()
+
+            wheel_travel_left = base_data
+            wheel_travel_right = base_data
+
         return wheel_travel_left, wheel_travel_right
